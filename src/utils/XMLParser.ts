@@ -29,7 +29,7 @@ export default class XMLParser {
    * @param element DOM元素
    * @returns 转换后的对象
    */
-  static elementToObject(element: Element): Record<string, any> {
+  static elementToObject(element: Element): Record<string, any> | string {
     const obj: Record<string, any> = {};
     
     // 处理属性
@@ -58,7 +58,7 @@ export default class XMLParser {
             obj[childName] = childObj;
           }
         } else {
-          const textContent = child.textContent || child.innerText || '';
+          const textContent = child.textContent || '';
           
           if (textContent.trim()) {
             if (obj[childName]) {
@@ -77,7 +77,7 @@ export default class XMLParser {
     }
     
     // 处理文本内容
-    const textContent = element.textContent || element.innerText || '';
+    const textContent = element.textContent || '';
     if (textContent.trim() && Object.keys(obj).length === 0) {
       return textContent.trim();
     }
@@ -183,7 +183,7 @@ export default class XMLParser {
    * @returns 文本内容
    */
   static getElementText(element: Element): string {
-    return element.textContent || element.innerText || '';
+    return element.textContent || '';
   }
 
   /**
@@ -192,7 +192,7 @@ export default class XMLParser {
    * @param namespaces 命名空间映射
    * @returns 解析器对象
    */
-  static namespaceAwareParser(xmlString: string, namespaces: Record<string, string> = {}): {
+  static namespaceAwareParser(xmlString: string, _namespaces: Record<string, string> = {}): {
     root: Element;
     find: (xpath: string) => Element[];
     element: (tagName: string) => Element | null;

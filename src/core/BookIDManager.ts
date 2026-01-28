@@ -3,16 +3,24 @@
  * 提供位置追踪、文本选择和注释功能的核心API
  */
 
+// 导入类型定义
+import type { ReadingPosition, PositionChangeEvent } from '../types/Position';
+
+// 导入核心类
+import { CFIGenerator } from './CFIGenerator';
+import { CFIParser } from './CFIParser';
+import { PositionTracker } from './PositionTracker';
+
 // 导出类型定义
-export * from '../types/CFI.js';
-export * from '../types/Position.js';
-export * from '../types/Selection.js';
-export * from '../types/Annotation.js';
+export * from '../types/CFI';
+export * from '../types/Position';
+export * from '../types/Selection';
+export * from '../types/Annotation';
 
 // 导出核心类
-export { CFIGenerator } from './CFIGenerator.js';
-export { CFIParser } from './CFIParser.js';
-export { PositionTracker } from './PositionTracker.js';
+export { CFIGenerator } from './CFIGenerator';
+export { CFIParser } from './CFIParser';
+export { PositionTracker } from './PositionTracker';
 
 /**
  * Book ID管理器 - 统一的Book ID操作接口
@@ -45,8 +53,9 @@ export class BookIDManager {
   /**
    * 获取当前Book ID
    */
-  getCurrentBookID(): any | null {
-    return this.positionTracker.getCurrentBookID();
+getCurrentBookID(): any | null {
+    const position = this.positionTracker.getScrollPosition();
+    return position?.cfi || null;
   }
 
   /**
@@ -108,9 +117,9 @@ export class BookIDManager {
   /**
    * 恢复保存的位置
    */
-  restorePosition(): boolean {
+restorePosition(): boolean {
     const savedPosition = this.positionTracker.getSavedPosition();
-    return savedPosition ? this.navigateToBookID(savedPosition.bookId) : false;
+    return savedPosition ? this.navigateToBookID(savedPosition.cfi) : false;
   }
 
   /**

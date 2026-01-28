@@ -344,8 +344,8 @@ export class HighlightStyleManager {
       
       // 导入自定义样式
       if (config.custom && typeof config.custom === 'object') {
-        Object.entries(config.custom).forEach(([name, style]) => {
-          this.createCustomStyle(name, style);
+Object.entries(config.custom).forEach(([name, style]) => {
+          this.createCustomStyle(name, style as HighlightStyle);
         });
       }
       
@@ -464,17 +464,17 @@ export class HighlightStyleManager {
       return;
     }
 
-    const style = document.createElement('style');
-    style.id = styleId;
-    style.textContent = this.generateCustomStyleCSS(name, style);
-    document.head.appendChild(style);
+const styleElement = document.createElement('style');
+    styleElement.id = styleId;
+    styleElement.textContent = this.generateCustomStyleCSS(name, style);
+    document.head.appendChild(styleElement);
   }
 
   /**
    * 生成自定义样式CSS
    */
   private generateCustomStyleCSS(name: string, style: HighlightStyle): string {
-    let css = `.${style.className} {`;
+    let css = `/* Custom style: ${name} */\n.${style.className} {`;
     
     if (style.backgroundColor) {
       css += `background-color: ${style.backgroundColor};`;

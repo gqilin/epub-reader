@@ -1,7 +1,7 @@
-import { ReadingPosition, PositionTrackingConfig, PositionChangeEvent } from '../types/Position.js';
-import { CFI } from '../types/CFI.js';
-import { CFIGenerator } from './CFIGenerator.js';
-import { CFIParser } from './CFIParser.js';
+import { ReadingPosition, PositionTrackingConfig, PositionChangeEvent } from '../types/Position';
+import { CFI } from '../types/CFI';
+import { CFIGenerator } from './CFIGenerator';
+import { CFIParser } from './CFIParser';
 
 /**
  * 位置追踪器
@@ -44,7 +44,7 @@ export class PositionTracker {
     }
 
     this.isTracking = true;
-    this.lastSavePosition = this.getCurrentPosition();
+    this.lastSavePosition = this.getScrollPosition();
     
     if (this.config.autoSave) {
       this.startAutoSave();
@@ -176,7 +176,7 @@ export class PositionTracker {
     try {
       const cfiObj = typeof cfi === 'string' ? CFIParser.parse(cfi) : cfi;
       
-      if (!CFIParser.validateCFI(cfiObj, this.container)) {
+      if (!CFIParser.validateBookID(cfiObj, this.container)) {
         console.warn('CFI validation failed');
         return false;
       }
@@ -342,8 +342,7 @@ export class PositionTracker {
    * 获取最可见的元素
    */
   private getMostVisibleElement(): Element | null {
-    const containerRect = this.container.getBoundingClientRect();
-    const viewportHeight = window.innerHeight;
+const viewportHeight = window.innerHeight;
     const viewportCenter = viewportHeight / 2;
 
     let bestElement: Element | null = null;
@@ -412,7 +411,7 @@ export class PositionTracker {
   /**
    * 计算全书进度
    */
-  private calculateBookProgress(chapterId: string, chapterProgress: number): number {
+  private calculateBookProgress(_chapterId: string, chapterProgress: number): number {
     // 这里需要外部提供章节信息来计算全书进度
     // 暂时返回章节进度
     return chapterProgress;

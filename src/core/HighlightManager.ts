@@ -1,21 +1,19 @@
-import { HighlightStyleManager } from '../HighlightStyleManager.js';
-import { SVGMarkRenderer } from '../renderers/SVGMarkRenderer.js';
-import { BaseHighlightRenderer, HighlightRenderingStrategy, HighlightRenderConfig } from '../renderers/BaseHighlightRenderer.js';
-import { HighlightStyle, AnnotationConfig, HighlightAnnotation } from '../../types/Annotation.js';
-import { CFI } from '../../types/CFI.js';
+import { HighlightStyleManager } from './HighlightStyleManager';
+import { SVGMarkRenderer } from './renderers/SVGMarkRenderer';
+import { BaseHighlightRenderer, HighlightRenderingStrategy, HighlightRenderConfig } from './renderers/BaseHighlightRenderer';
+import { HighlightStyle, AnnotationConfig, HighlightAnnotation } from '../types/Annotation';
+import { CFI } from '../types/CFI';
 
 /**
  * 高亮管理器
  * 统一管理高亮创建、渲染和样式
  */
 export class HighlightManager {
-  private container: Element;
   private styleManager: HighlightStyleManager;
   private renderer: BaseHighlightRenderer;
   private highlights: Map<string, HighlightAnnotation> = new Map();
 
   constructor(container: Element, config: AnnotationConfig = {}) {
-    this.container = container;
     this.styleManager = new HighlightStyleManager(config);
     
     // 默认使用SVG渲染器
@@ -63,11 +61,14 @@ export class HighlightManager {
       color: style.backgroundColor || style.color || '#ffff00',
       style,
       selectedText: highlightElement.text,
-      textRange: {
-        text: highlightElement.text,
-        startOffset: 0,
-        endOffset: highlightElement.text.length,
-        cfi: this.createMockCFI()
+textRange: {
+        startCFI: this.createMockCFI(),
+        endCFI: this.createMockCFI(),
+        selectedText: highlightElement.text,
+        chapterId: 'unknown',
+        contextBefore: '',
+        contextAfter: '',
+        timestamp: Date.now()
       },
       highlightId: highlightElement.id,
       active: true,
@@ -253,19 +254,7 @@ export class HighlightManager {
     };
   }
 
-  /**
-   * 恢复Range对象（需要DOM上下文）
-   */
-  private restoreRange(textRange: any, container: Element): Range | null {
-    try {
-      const range = document.createRange();
-      // 这里需要实现更复杂的Range恢复逻辑
-      // 暂时返回null
-      return null;
-    } catch {
-      return null;
-    }
-  }
+
 
   /**
    * 获取高亮统计信息

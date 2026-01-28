@@ -120,7 +120,7 @@ export default class ZipReader {
    * @param path 文件路径
    * @returns MIME类型
    */
-  getFileMimeType(path: string): string {
+  getFileMimeType(path: string): string | null {
     const file = this.entries.get(path);
     if (!file) return null;
     

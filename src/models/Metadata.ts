@@ -1,4 +1,4 @@
-import { EPUBMetadata, ManifestItem } from '../types/index.js';
+import { EPUBMetadata } from '../types/index';
 
 /**
  * EPUB元数据类
@@ -16,7 +16,9 @@ export default class Metadata implements EPUBMetadata {
   cover: string | null = null;
   custom: Record<string, any> = {};
 
-  constructor();
+  constructor() {
+    // Default constructor
+  }
 
   /**
    * 从OPF元数据创建Metadata实例

@@ -1,4 +1,4 @@
-import { CFI, CFIPath, CFIParseOptions } from '../types/CFI.js';
+import { CFI, CFIPath, CFIParseOptions } from '../types/CFI';
 
 /**
  * CFI（Canonical Fragment Identifier）解析器
@@ -26,8 +26,8 @@ export class CFIParser {
       // 解析路径
       const path = this.parsePath(pathParts.join('/'));
       
-      // 提取文本偏移
-      const textOffset = this.extractTextOffset(cfiString);
+// 提取文本偏移
+      const textOffset = this.extractTextOffset(bookString);
       
       const cfi: CFI = {
         chapterId,
