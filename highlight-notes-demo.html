@@ -427,12 +427,17 @@
             background: #5a6fd6;
         }
 
-        /* 阅读区域 */
+/* 阅读区域 */
         .reading-area {
             flex: 1;
             overflow-y: auto;
             padding: 40px;
             position: relative;
+        }
+
+        .reading-area.paging-mode {
+            overflow: hidden;
+            padding: 0;
         }
 
         .reading-content {
@@ -441,6 +446,206 @@
             font-size: 16px;
             line-height: 1.8;
             color: #333;
+        }
+
+        /* 翻页模式样式 */
+        .paging-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .paging-content {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .horizontal-pages {
+            display: flex;
+            height: 100%;
+            transition: transform 0.3s ease;
+            will-change: transform;
+        }
+
+        .page {
+            flex-shrink: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 40px 0;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        .page-content {
+            background: white;
+            padding: 40px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            height: 100%;
+            overflow: hidden;
+            font-size: 16px;
+            line-height: 1.8;
+            color: #333;
+            box-sizing: border-box;
+        }
+
+        /* 单栏模式 */
+        .single-column .page-content {
+            max-width: 800px;
+            width: 100%;
+        }
+
+        /* 双栏模式 */
+        .double-column .page-content {
+            max-width: 1200px;
+            width: 100%;
+            column-count: 2;
+            column-gap: 40px;
+            column-fill: auto;
+        }
+
+        .double-column .page-content h1,
+        .double-column .page-content h2,
+        .double-column .page-content h3 {
+            column-span: all;
+            break-after: avoid;
+        }
+
+        .double-column .page-content p {
+            break-inside: avoid;
+            margin-bottom: 1em;
+        }
+
+        /* 页面过渡动画 */
+        .horizontal-pages.page-transition {
+            transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        /* 翻页控制样式 */
+        .paging-nav-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 60px;
+            display: flex;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .paging-nav-area {
+            flex: 1;
+            pointer-events: auto;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .paging-nav-area:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+
+        .paging-nav-area.prev {
+            margin-right: 50%;
+        }
+
+        .paging-nav-area.next {
+            margin-left: 50%;
+        }
+
+        /* 翻页控制 */
+        .paging-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            background: rgba(255,255,255,0.9);
+            padding: 10px 20px;
+            border-radius: 25px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+
+        .paging-controls button {
+            padding: 8px 15px;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+        }
+
+        .paging-controls button:hover {
+            background: #f0f0f0;
+        }
+
+        .paging-controls button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .page-info {
+            font-size: 0.9rem;
+            color: #666;
+            min-width: 80px;
+            text-align: center;
+        }
+
+        /* 触摸滑动手势支持 */
+        .swipe-hint {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 2rem;
+            color: rgba(0,0,0,0.3);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .swipe-hint.left {
+            left: 20px;
+        }
+
+        .swipe-hint.right {
+            right: 20px;
+        }
+
+        .swipe-hint.show {
+            opacity: 1;
+        }
+
+        /* 模式按钮样式 */
+        .mode-btn, .layout-btn {
+            flex: 1;
+            min-width: 60px;
+            padding: 6px;
+            font-size: 0.8rem;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.3s;
+        }
+
+        .mode-btn:hover, .layout-btn:hover {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+
+        .mode-btn.active, .layout-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
         }
 
         .reading-content p {
@@ -677,6 +882,20 @@
             <!-- 样式控制 -->
             <div class="style-controls">
                 <div class="control-group">
+                    <label>阅读模式</label>
+                    <div class="preset-buttons">
+                        <button onclick="setReadingMode('scroll')" id="scrollModeBtn" class="mode-btn active">滚动</button>
+                        <button onclick="setReadingMode('page')" id="pageModeBtn" class="mode-btn">翻页</button>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>页面布局</label>
+                    <div class="preset-buttons">
+                        <button onclick="setColumnLayout('single')" id="singleColumnBtn" class="layout-btn active">单栏</button>
+                        <button onclick="setColumnLayout('double')" id="doubleColumnBtn" class="layout-btn">双栏</button>
+                    </div>
+                </div>
+                <div class="control-group">
                     <label>主题</label>
                     <div class="preset-buttons">
                         <button onclick="applyTheme('light')">浅色</button>
@@ -828,6 +1047,42 @@
                 if (e.key === 'Escape') {
                     closeNoteModal();
                     hideHighlightToolbar();
+                }
+                
+                // 翻页模式的键盘导航
+                if (viewer && viewer.settings.readingMode === 'page') {
+                    if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+                        e.preventDefault();
+                        viewer.previousPage();
+                    } else if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+                        e.preventDefault();
+                        viewer.nextPage();
+                    } else if (e.key === 'Home') {
+                        e.preventDefault();
+                        viewer.currentPage = 0;
+                        viewer.updatePagePosition();
+                    } else if (e.key === 'End') {
+                        e.preventDefault();
+                        viewer.currentPage = viewer.totalPages - 1;
+                        viewer.updatePagePosition();
+                    }
+                }
+                
+                // 滚动模式的键盘导航
+                if (viewer && viewer.settings.readingMode === 'scroll') {
+                    if (e.key === 'PageDown') {
+                        e.preventDefault();
+                        document.getElementById('readingArea').scrollBy({
+                            top: window.innerHeight * 0.8,
+                            behavior: 'smooth'
+                        });
+                    } else if (e.key === 'PageUp') {
+                        e.preventDefault();
+                        document.getElementById('readingArea').scrollBy({
+                            top: -window.innerHeight * 0.8,
+                            behavior: 'smooth'
+                        });
+                    }
                 }
             });
         }
@@ -1357,6 +1612,45 @@
             }
         }
 
+        // ==================== 阅读模式控制 ====================
+        function setReadingMode(mode) {
+            // 更新按钮状态
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            if (mode === 'scroll') {
+                document.getElementById('scrollModeBtn').classList.add('active');
+            } else {
+                document.getElementById('pageModeBtn').classList.add('active');
+            }
+            
+            // 更新阅读器设置
+            if (viewer) {
+                viewer.setReadingMode(mode);
+                showToast(`已切换到${mode === 'scroll' ? '滚动' : '翻页'}模式`, 'info');
+            }
+        }
+
+        function setColumnLayout(layout) {
+            // 更新按钮状态
+            document.querySelectorAll('.layout-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            if (layout === 'single') {
+                document.getElementById('singleColumnBtn').classList.add('active');
+            } else {
+                document.getElementById('doubleColumnBtn').classList.add('active');
+            }
+            
+            // 更新阅读器设置
+            if (viewer) {
+                viewer.setColumnLayout(layout);
+                showToast(`已切换到${layout === 'single' ? '单栏' : '双栏'}布局`, 'info');
+            }
+        }
+
         // ==================== 样式控制 ====================
         function applyTheme(theme) {
             const themes = {
@@ -1367,14 +1661,40 @@
             
             const t = themes[theme];
             if (t) {
-                document.querySelector('.reading-content').style.backgroundColor = t.bg;
-                document.querySelector('.reading-content').style.color = t.color;
+                document.querySelector('.reading-content')?.style.setProperty('background-color', t.bg);
+                document.querySelector('.reading-content')?.style.setProperty('color', t.color);
                 document.getElementById('readingArea').style.backgroundColor = t.bg;
+                
+                // 更新翻页模式的背景
+                document.querySelectorAll('.page-content').forEach(page => {
+                    page.style.backgroundColor = t.bg;
+                    page.style.color = t.color;
+                });
+            }
+            
+            // 同时更新阅读器设置
+            if (viewer) {
+                viewer.setBackgroundColor(t.bg);
+                viewer.setFontColor(t.color);
             }
         }
 
         function changeFontSize(size) {
-            document.querySelector('.reading-content').style.fontSize = size;
+            document.querySelector('.reading-content')?.style.setProperty('font-size', size);
+            document.querySelectorAll('.page-content').forEach(page => {
+                page.style.fontSize = size;
+            });
+            
+            // 更新阅读器设置并重新分页
+            if (viewer) {
+                viewer.setFontSize(size);
+                if (viewer.settings.readingMode === 'page' && viewer.currentChapter) {
+                    // 翻页模式下重新分页
+                    setTimeout(() => {
+                        viewer.renderChapter(viewer.currentChapter);
+                    }, 100);
+                }
+            }
         }
 
         // ==================== 工具函数 ====================
