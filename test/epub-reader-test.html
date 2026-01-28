@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EPUB阅读器核心功能测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .controls button {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .controls button:hover {
+            background: #e9ecef;
+            border-color: #adb5bd;
+        }
+        
+        .controls select {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+        }
+        
+        .content {
+            line-height: 1.8;
+            font-size: 16px;
+            color: #333;
+            user-select: text;
+            position: relative;
+        }
+        
+        .content p {
+            margin-bottom: 16px;
+            text-align: justify;
+        }
+        
+        .info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        .highlight-list {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff3e0;
+            border-radius: 6px;
+        }
+        
+        .highlight-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 4px;
+            border-left: 4px solid #ff9800;
+        }
+        
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e8f5e8;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>EPUB阅读器核心功能测试</h1>
+        
+        <div class="controls">
+            <button onclick="initializeReader()">初始化阅读器</button>
+            <button onclick="getCurrentPosition()">获取当前位置</button>
+            <button onclick="savePosition()">保存位置</button>
+            <button onclick="restorePosition()">恢复位置</button>
+            
+            <select id="highlightStyle">
+                <option value="yellow">黄色高亮</option>
+                <option value="green">绿色高亮</option>
+                <option value="blue">蓝色高亮</option>
+                <option value="dashedYellow">虚线黄色</option>
+                <option value="wavyRed">波浪线红色</option>
+                <option value="gradientSunset">渐变日落</option>
+                <option value="markerYellow">荧光笔黄色</option>
+            </select>
+            
+            <button onclick="createHighlightFromSelection()">创建高亮</button>
+            <button onclick="clearAllHighlights()">清除所有高亮</button>
+            <button onclick="exportData()">导出数据</button>
+        </div>
+        
+        <div class="content" id="content">
+            <p>这是一段用于测试EPUB阅读器核心功能的示例文本。请选择这段文本中的任意部分，然后点击"创建高亮"按钮来测试高亮功能。</p>
+            
+            <p>EPUB阅读器支持多种高亮样式，包括基础颜色高亮、虚线样式、波浪线样式、渐变高亮和荧光笔效果。您可以通过上方的下拉菜单选择不同的样式。</p>
+            
+            <p>CFI（Canonical Fragment Identifier）系统提供了精确的位置追踪功能。每个文本位置都可以生成唯一的Book ID，格式为"book:/"开头。这确保了位置的准确性和可恢复性。</p>
+            
+            <p>SVG高亮渲染器使用矢量图形技术实现高亮效果，支持复杂的样式如虚线、波浪线和渐变。这种渲染方式不会影响原始DOM结构，提供了更好的性能和兼容性。</p>
+            
+            <p>高亮样式管理器提供了丰富的预设样式和自定义样式功能。用户可以根据不同的阅读场景选择合适的高亮样式，如学习、复习、标注等。</p>
+            
+            <p>位置追踪系统会自动监听滚动事件，实时更新当前阅读位置。用户可以随时保存当前位置，并在之后准确恢复到相同的阅读位置。</p>
+        </div>
+        
+        <div class="info">
+            <h3>使用说明：</h3>
+            <ul>
+                <li>1. 点击"初始化阅读器"按钮初始化系统</li>
+                <li>2. 选择文本内容，然后选择高亮样式</li>
+                <li>3. 点击"创建高亮"按钮为选中文本创建高亮</li>
+                <li>4. 使用位置相关功能测试CFI系统</li>
+                <li>5. 点击"导出数据"查看所有高亮和位置信息</li>
+            </ul>
+        </div>
+        
+        <div class="highlight-list" id="highlightList">
+            <h3>当前高亮列表：</h3>
+            <div id="highlightItems">暂无高亮</div>
+        </div>
+        
+        <div class="status" id="status">
+            状态：等待初始化...
+        </div>
+    </div>
+
+    <script type="module">
+        // 这里应该导入实际的模块，但由于是测试环境，我们先创建模拟对象
+        let readerCore = null;
+        
+        window.initializeReader = function() {
+            try {
+                const content = document.getElementById('content');
+                
+                // 模拟EPUBReaderCore（实际使用时应该导入真实模块）
+                readerCore = {
+                    isInitialized: true,
+                    highlights: [],
+                    
+                    initialize: function() {
+                        updateStatus('阅读器已初始化');
+                        updateHighlightList();
+                    },
+                    
+                    createHighlight: function(range, style) {
+                        const highlightId = 'highlight-' + Date.now();
+                        const selectedText = range.toString();
+                        
+                        // 创建高亮元素
+                        const span = document.createElement('span');
+                        span.style.backgroundColor = getStyleColor(style);
+                        span.style.padding = '2px 4px';
+                        span.style.borderRadius = '3px';
+                        span.setAttribute('data-highlight-id', highlightId);
+                        
+                        try {
+                            range.surroundContents(span);
+                        } catch (e) {
+                            // 如果无法包围内容，使用其他方法
+                            span.textContent = selectedText;
+                            range.deleteContents();
+                            range.insertNode(span);
+                        }
+                        
+                        const highlight = {
+                            id: highlightId,
+                            text: selectedText,
+                            style: style,
+                            timestamp: new Date()
+                        };
+                        
+                        this.highlights.push(highlight);
+                        updateHighlightList();
+                        updateStatus(`创建高亮: ${selectedText.substring(0, 20)}...`);
+                        
+                        return highlight;
+                    },
+                    
+                    clearAllHighlights: function() {
+                        const highlights = document.querySelectorAll('[data-highlight-id]');
+                        highlights.forEach(h => {
+                            const parent = h.parentNode;
+                            while (h.firstChild) {
+                                parent.insertBefore(h.firstChild, h);
+                            }
+                            parent.removeChild(h);
+                        });
+                        
+                        this.highlights = [];
+                        updateHighlightList();
+                        updateStatus('已清除所有高亮');
+                    },
+                    
+                    getCurrentPosition: function() {
+                        const scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+                        return {
+                            bookId: `book:/chapter-1/0/0:${scrollTop}`,
+                            scrollTop: scrollTop
+                        };
+                    },
+                    
+                    exportData: function() {
+                        return {
+                            highlights: this.highlights,
+                            currentPosition: this.getCurrentPosition(),
+                            timestamp: Date.now()
+                        };
+                    }
+                };
+                
+                readerCore.initialize();
+                
+            } catch (error) {
+                updateStatus('初始化失败: ' + error.message);
+            }
+        };
+        
+        window.getCurrentPosition = function() {
+            if (!readerCore) {
+                updateStatus('请先初始化阅读器');
+                return;
+            }
+            
+            const position = readerCore.getCurrentPosition();
+            updateStatus('当前位置: ' + position.bookId);
+        };
+        
+        window.savePosition = function() {
+            if (!readerCore) {
+                updateStatus('请先初始化阅读器');
+                return;
+            }
+            
+            localStorage.setItem('epub-reader-position', JSON.stringify(readerCore.getCurrentPosition()));
+            updateStatus('位置已保存');
+        };
+        
+        window.restorePosition = function() {
+            if (!readerCore) {
+                updateStatus('请先初始化阅读器');
+                return;
+            }
+            
+            const savedPosition = localStorage.getItem('epub-reader-position');
+            if (savedPosition) {
+                const position = JSON.parse(savedPosition);
+                window.scrollTo(0, position.scrollTop);
+                updateStatus('位置已恢复');
+            } else {
+                updateStatus('没有保存的位置');
+            }
+        };
+        
+        window.createHighlightFromSelection = function() {
+            if (!readerCore) {
+                updateStatus('请先初始化阅读器');
+                return;
+            }
+            
+            const selection = window.getSelection();
+            if (selection.rangeCount === 0 || selection.isCollapsed) {
+                updateStatus('请先选择文本');
+                return;
+            }
+            
+            const style = document.getElementById('highlightStyle').value;
+            const range = selection.getRangeAt(0);
+            
+            try {
+                readerCore.createHighlight(range, style);
+                selection.removeAllRanges();
+            } catch (error) {
+                updateStatus('创建高亮失败: ' + error.message);
+            }
+        };
+        
+        window.clearAllHighlights = function() {
+            if (!readerCore) {
+                updateStatus('请先初始化阅读器');
+                return;
+            }
+            
+            readerCore.clearAllHighlights();
+        };
+        
+        window.exportData = function() {
+            if (!readerCore) {
+                updateStatus('请先初始化阅读器');
+                return;
+            }
+            
+            const data = readerCore.exportData();
+            console.log('导出的数据:', data);
+            
+            updateStatus(`数据已导出到控制台 (${data.highlights.length} 个高亮)`);
+            
+            // 可选：将数据保存到文件
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'epub-reader-data.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+        
+        function getStyleColor(styleName) {
+            const colors = {
+                yellow: '#ffeb3b',
+                green: '#c8e6c9',
+                blue: '#bbdefb',
+                dashedYellow: '#ffeb3b',
+                wavyRed: '#d32f2f',
+                gradientSunset: '#ff9a56',
+                markerYellow: '#fff59d'
+            };
+            return colors[styleName] || '#ffeb3b';
+        }
+        
+        function updateStatus(message) {
+            document.getElementById('status').textContent = '状态：' + message;
+        }
+        
+        function updateHighlightList() {
+            const container = document.getElementById('highlightItems');
+            if (!readerCore || readerCore.highlights.length === 0) {
+                container.textContent = '暂无高亮';
+                return;
+            }
+            
+            container.innerHTML = readerCore.highlights.map(h => 
+                `<div class="highlight-item">
+                    <strong>${h.style}</strong>: ${h.text.substring(0, 50)}...
+                </div>`
+            ).join('');
+        }
+        
+        // 初始化
+        updateStatus('等待初始化...');
+    </script>
+</body>
+</html>

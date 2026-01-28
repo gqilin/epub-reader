@@ -12,6 +12,9 @@ export { default as EPUBReader } from './core/EPUBParser.js';
 export { default as EPUBViewer } from './core/EPUBViewer.js';
 export { default as StyleController } from './core/StyleController.js';
 
+// 导出Book ID系统
+export * from './core/BookIDManager.js';
+
 // 默认导出主解析器
 import EPUBReader from './core/EPUBParser.js';
 export default EPUBReader;
