@@ -1,3 +1,4 @@
+import typescript from '@rollup/plugin-typescript';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import { babel } from '@rollup/plugin-babel';
@@ -6,7 +7,7 @@ import terser from '@rollup/plugin-terser';
 export default [
   // UMD build
   {
-    input: 'src/index.umd.js',
+    input: 'src/index.umd.ts',
     output: {
       file: 'dist/epubreader.js',
       format: 'umd',
@@ -17,15 +18,21 @@ export default [
     plugins: [
       nodeResolve(),
       commonjs(),
+      typescript({
+        tsconfig: './tsconfig.json',
+        declaration: false,
+        sourceMap: true
+      }),
       babel({
         babelHelpers: 'bundled',
-        presets: ['@babel/preset-env']
+        presets: ['@babel/preset-env'],
+        extensions: ['.ts', '.js']
       })
     ]
   },
   // ES Module build
   {
-    input: 'src/index.js',
+    input: 'src/index.ts',
     output: {
       file: 'dist/epubreader.esm.js',
       format: 'es',
@@ -34,27 +41,35 @@ export default [
     plugins: [
       nodeResolve(),
       commonjs(),
-      babel({
-        babelHelpers: 'bundled',
-        presets: ['@babel/preset-env']
+      typescript({
+        tsconfig: './tsconfig.json',
+        declaration: true,
+        sourceMap: true
       })
     ]
   },
   // Minified UMD build
   {
-    input: 'src/index.js',
+    input: 'src/index.umd.ts',
     output: {
       file: 'dist/epubreader.min.js',
       format: 'umd',
       name: 'EPUBReader',
-      sourcemap: true
+      sourcemap: true,
+      exports: 'default'
     },
     plugins: [
       nodeResolve(),
       commonjs(),
+      typescript({
+        tsconfig: './tsconfig.json',
+        declaration: false,
+        sourceMap: true
+      }),
       babel({
         babelHelpers: 'bundled',
-        presets: ['@babel/preset-env']
+        presets: ['@babel/preset-env'],
+        extensions: ['.ts', '.js']
       }),
       terser()
     ]

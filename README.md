@@ -1,6 +1,8 @@
 # 📚 EPUBReader
 
-一个功能强大、框架无关的 JavaScript EPUB 解析和阅读库。
+一个功能强大、框架无关的 **TypeScript/JavaScript** EPUB 解析和阅读库。
+
+✨ **完全 TypeScript 支持** - 提供完整类型定义和智能提示。
 
 ## ✨ 特性
 
@@ -14,21 +16,26 @@
 
 ## 🚀 快速开始
 
-### 基础解析器
+### TypeScript 使用
 
-```html
-<script src="./dist/epubreader.js"></script>
-<script>
-const reader = new EPUBReader();
-await reader.load(epubArrayBuffer);
+```typescript
+import EPUBReader, { EPUBViewer, ViewerOptions } from 'epubreader';
 
-const metadata = reader.getMetadata();
-const chapters = reader.getChapters();
-const chapter = await reader.getChapter(chapters[0].id);
-</script>
+// 类型安全的阅读器初始化
+const options: ViewerOptions = {
+    contentArea: document.getElementById('content')!,
+    tocArea: document.getElementById('toc')!,
+    metadataArea: document.getElementById('metadata')!,
+    onChapterChange: (chapter) => {
+        console.log(`当前章节: ${chapter.title}`);
+    }
+};
+
+const viewer = new EPUBViewer(options);
+await viewer.load(epubArrayBuffer);
 ```
 
-### 完整阅读器
+### JavaScript 使用
 
 ```html
 <script src="./dist/epubreader.js"></script>

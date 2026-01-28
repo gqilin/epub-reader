@@ -252,3 +252,12 @@ yarn.lock
 
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test
+# TypeScript cache
+*.tsbuildinfo
+*.tsbuildinfo.*
+
+# TypeScript output
+*.d.ts.map
+
+# TypeScript declaration files in source
+src/**/*.d.ts
