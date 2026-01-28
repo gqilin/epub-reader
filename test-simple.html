@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EPUBReader 库测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border-color: #bee5eb;
+            color: #0c5460;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #results {
+            white-space: pre-wrap;
+            font-family: monospace;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 EPUBReader 库功能测试</h1>
+    
+    <div class="test-section info">
+        <h3>测试说明</h3>
+        <p>这个页面用于测试构建后的 EPUBReader 库是否正常工作。</p>
+        <p>如果库加载成功，你会看到一个绿色的成功消息。</p>
+    </div>
+
+    <div class="test-section">
+        <h3>1. 库加载测试</h3>
+        <div id="libraryTest">正在检测...</div>
+    </div>
+
+    <div class="test-section">
+        <h3>2. 基本功能测试</h3>
+        <button onclick="testBasicFunctionality()">测试基本功能</button>
+        <button onclick="testErrorHandling()">测试错误处理</button>
+        <button onclick="clearResults()">清除结果</button>
+        <div id="results"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>3. 文件上传测试</h3>
+        <input type="file" id="epubFile" accept=".epub">
+        <button onclick="testFileUpload()">测试文件上传</button>
+        <div id="fileTestResults"></div>
+    </div>
+
+    <!-- 引入构建后的库 -->
+    <script src="./dist/epubreader.js"></script>
+    
+    <script>
+        let results = [];
+
+        // 添加结果到显示区域
+        function addResult(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            results.push(`[${timestamp}] ${type.toUpperCase()}: ${message}`);
+            updateResultsDisplay();
+        }
+
+        function updateResultsDisplay() {
+            document.getElementById('results').textContent = results.join('\n');
+        }
+
+        function clearResults() {
+            results = [];
+            updateResultsDisplay();
+        }
+
+        // 测试库是否正确加载
+        function testLibraryLoading() {
+            const testDiv = document.getElementById('libraryTest');
+            
+            try {
+                if (typeof EPUBReader !== 'undefined') {
+                    testDiv.className = 'test-section success';
+                    testDiv.innerHTML = '✅ EPUBReader 库加载成功！';
+                    addResult('EPUBReader 库已正确加载', 'success');
+                    addResult('EPUBReader 类型: ' + typeof EPUBReader, 'info');
+                    
+                    // 测试实例化
+                    try {
+                        const reader = new EPUBReader();
+                        addResult('EPUBReader 实例化成功', 'success');
+                        
+                        // 测试基本方法存在
+                        const methods = ['load', 'getMetadata', 'getTableOfContents', 'getChapters', 'getChapter', 'search', 'destroy'];
+                        methods.forEach(method => {
+                            if (typeof reader[method] === 'function') {
+                                addResult(`方法 ${method}() 存在`, 'success');
+                            } else {
+                                addResult(`方法 ${method}() 不存在`, 'error');
+                            }
+                        });
+                        
+                        reader.destroy();
+                    } catch (error) {
+                        addResult(`实例化失败: ${error.message}`, 'error');
+                    }
+                } else {
+                    testDiv.className = 'test-section error';
+                    testDiv.innerHTML = '❌ EPUBReader 库加载失败！';
+                    addResult('EPUBReader 库未正确加载', 'error');
+                }
+            } catch (error) {
+                testDiv.className = 'test-section error';
+                testDiv.innerHTML = `❌ 检测过程中出错: ${error.message}`;
+                addResult(`检测错误: ${error.message}`, 'error');
+            }
+        }
+
+        // 测试基本功能
+        async function testBasicFunctionality() {
+            addResult('开始基本功能测试', 'info');
+            
+            try {
+                const reader = new EPUBReader();
+                addResult('创建 EPUBReader 实例', 'success');
+                
+                // 测试在未加载时调用方法
+                try {
+                    reader.getMetadata();
+                    addResult('未加载时获取元数据应该失败，但没有', 'error');
+                } catch (error) {
+                    addResult('未加载时正确抛出错误: ' + error.message, 'success');
+                }
+                
+                // 测试销毁
+                reader.destroy();
+                addResult('销毁实例成功', 'success');
+                
+            } catch (error) {
+                addResult(`基本功能测试失败: ${error.message}`, 'error');
+            }
+            
+            addResult('基本功能测试完成', 'info');
+        }
+
+        // 测试错误处理
+        async function testErrorHandling() {
+            addResult('开始错误处理测试', 'info');
+            
+            try {
+                const reader = new EPUBReader();
+                
+                // 测试加载无效数据
+                try {
+                    await reader.load(new ArrayBuffer(0));
+                    addResult('加载空数据应该失败，但没有', 'error');
+                } catch (error) {
+                    addResult('正确处理空数据错误: ' + error.message, 'success');
+                }
+                
+                // 测试加载无效数据
+                try {
+                    await reader.load('invalid data');
+                    addResult('加载字符串应该失败，但没有', 'error');
+                } catch (error) {
+                    addResult('正确处理无效类型错误: ' + error.message, 'success');
+                }
+                
+                reader.destroy();
+                addResult('错误处理测试完成', 'success');
+                
+            } catch (error) {
+                addResult(`错误处理测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 测试文件上传
+        async function testFileUpload() {
+            const fileInput = document.getElementById('epubFile');
+            const resultsDiv = document.getElementById('fileTestResults');
+            
+            const file = fileInput.files[0];
+            if (!file) {
+                resultsDiv.className = 'test-section error';
+                resultsDiv.innerHTML = '❌ 请先选择一个EPUB文件';
+                return;
+            }
+            
+            resultsDiv.className = 'test-section info';
+            resultsDiv.innerHTML = `🔄 正在测试文件: ${file.name} (${formatFileSize(file.size)})`;
+            
+            try {
+                const reader = new EPUBReader();
+                const startTime = Date.now();
+                
+                const arrayBuffer = await file.arrayBuffer();
+                await reader.load(arrayBuffer);
+                
+                const loadTime = Date.now() - startTime;
+                
+                // 获取元数据
+                const metadata = reader.getMetadata();
+                
+                // 获取章节
+                const chapters = reader.getChapters();
+                
+                // 获取目录
+                const toc = reader.getTableOfContents();
+                
+                resultsDiv.className = 'test-section success';
+                resultsDiv.innerHTML = `
+                    ✅ 文件加载成功！
+                    <br>加载时间: ${loadTime}ms
+                    <br>书名: ${metadata.title || '未知'}
+                    <br>作者: ${metadata.creator || '未知'}
+                    <br>章节数: ${chapters.length}
+                    <br>有目录: ${toc ? '是' : '否'}
+                `;
+                
+                addResult(`文件 ${file.name} 加载成功`, 'success');
+                addResult(`元数据: ${JSON.stringify(metadata)}`, 'info');
+                addResult(`章节数: ${chapters.length}`, 'info');
+                
+                reader.destroy();
+                
+            } catch (error) {
+                resultsDiv.className = 'test-section error';
+                resultsDiv.innerHTML = `❌ 文件加载失败: ${error.message}`;
+                addResult(`文件 ${file.name} 加载失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // 页面加载完成后执行测试
+        document.addEventListener('DOMContentLoaded', function() {
+            testLibraryLoading();
+        });
+    </script>
+</body>
+</html>
