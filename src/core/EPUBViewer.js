@@ -1,7 +1,9 @@
 import EPUBReader from './EPUBParser.js';
+import { CFIParser } from './CFIParser.js';
+import { CFIManager } from './CFIManager.js';
 
 class EPUBViewer {
-  constructor(options = {}) {
+constructor(options = {}) {
     // 核心解析器
     this.reader = new EPUBReader();
     
@@ -25,6 +27,7 @@ class EPUBViewer {
       padding: options.padding || '20px',
       readingMode: options.readingMode || 'scroll', // 'scroll' or 'page'
       columnLayout: options.columnLayout || 'single', // 'single' or 'double'
+      textFlow: options.textFlow !== false, // true: 启用文本流动, false: 按元素分页
       ...options.settings
     };
     
@@ -41,6 +44,11 @@ class EPUBViewer {
     this.onChapterChange = options.onChapterChange || null;
     this.onLoad = options.onLoad || null;
     this.onError = options.onError || null;
+    
+    // 设置全局引用，供CFIManager使用
+    if (typeof window !== 'undefined') {
+      window.viewer = this;
+    }
     
     // 初始化
     this.init();
@@ -316,16 +324,25 @@ class EPUBViewer {
     // 创建页面内容（用于分页计算）
     const tempPageContent = document.createElement('div');
     tempPageContent.className = 'page-content';
+    
+    // 根据分栏设置计算宽度
+    let pageWidth = this.contentArea.clientWidth - 80;
+    if (this.settings.columnLayout === 'double') {
+      // 双栏模式：减去栏间距，每栏宽度约为页面的一半
+      pageWidth = Math.floor((this.contentArea.clientWidth - 80 - 20) / 2); // 20px是栏间距
+    }
+    
     tempPageContent.style.cssText = `
       position: absolute;
       top: -9999px;
       left: -9999px;
-      width: ${this.contentArea.clientWidth - 80}px;
+      width: ${pageWidth}px;
       padding: 40px;
       font-size: ${this.settings.fontSize};
       line-height: ${this.settings.lineHeight};
       font-family: ${this.settings.fontFamily};
       visibility: hidden;
+      ${this.settings.columnLayout === 'double' ? 'column-count: 1;' : ''}
     `;
     
     // 添加章节标题
@@ -375,13 +392,25 @@ class EPUBViewer {
         pageContentDiv.appendChild(titleElement);
       }
       
-      const pageContentElement = document.createElement('div');
-      pageContentElement.className = 'chapter-content';
-      pageContentElement.innerHTML = pageContent;
-      pageContentDiv.appendChild(pageContentElement);
-      
-      page.appendChild(pageContentDiv);
-      horizontalPages.appendChild(page);
+       const pageContentElement = document.createElement('div');
+       pageContentElement.className = 'chapter-content';
+       pageContentElement.innerHTML = pageContent;
+       pageContentDiv.appendChild(pageContentElement);
+       
+       // 根据设置添加分栏类
+       if (this.settings.columnLayout === 'double') {
+         pageContentDiv.classList.add('double-column');
+         if (this.settings.textFlow !== false) {
+           pageContentDiv.classList.add('text-flow');
+         } else {
+           pageContentDiv.classList.add('no-text-flow');
+         }
+       } else {
+         pageContentDiv.classList.add('single-column');
+       }
+       
+       page.appendChild(pageContentDiv);
+       horizontalPages.appendChild(page);
     });
     
     // 创建导航覆盖层（用于点击翻页）
@@ -407,6 +436,12 @@ class EPUBViewer {
     // 更新总页数
     this.totalPages = pages.length;
     this.currentPage = 0;
+    
+    // 调试信息
+    console.log(`Chapter "${chapter.title}": ${pages.length} pages generated`);
+    if (this.settings.columnLayout === 'double') {
+      console.log(`Double column mode with text flow: ${this.settings.textFlow !== false ? 'enabled' : 'disabled'}`);
+    }
     
 // 设置初始位置
     this.updatePagePosition();
@@ -438,6 +473,93 @@ class EPUBViewer {
     this.horizontalPages.style.transform = `translateX(${translateX}%)`;
     this.updatePagingControls();
   }
+
+  // 在翻页模式下导航到指定位置
+  async navigateToPositionInPagingMode(cfi) {
+    if (!this.isPagingMode || !this.currentChapter) {
+      return false;
+    }
+
+    try {
+      // 查找目标元素
+      const targetElement = CFIParser.findElement(cfi, this.contentArea);
+      if (!targetElement) {
+        console.warn('Target element not found for CFI:', cfi);
+        return false;
+      }
+
+      // 获取所有页面元素
+      const pages = this.horizontalPages.querySelectorAll('.page');
+      if (pages.length === 0) {
+        return false;
+      }
+
+      // 找到目标元素所在的页面
+      let targetPageIndex = 0;
+      for (let i = 0; i < pages.length; i++) {
+        const page = pages[i];
+        if (page.contains(targetElement)) {
+          targetPageIndex = i;
+          break;
+        }
+      }
+
+      // 导航到目标页面
+      this.currentPage = targetPageIndex;
+      this.updatePagePosition();
+      this.addTransitionEffect();
+
+      // 高亮目标元素（可选）
+      this.highlightTargetElement(targetElement);
+
+      return true;
+    } catch (error) {
+      console.error('Failed to navigate to position in paging mode:', error);
+      return false;
+    }
+  }
+
+  // 高亮目标元素
+  highlightTargetElement(element) {
+    if (!element) return;
+
+    // 添加临时高亮样式
+    const originalStyle = element.style.cssText;
+    element.style.cssText += `
+      background-color: yellow !important;
+      transition: background-color 2s ease;
+    `;
+
+    // 2秒后移除高亮
+    setTimeout(() => {
+      element.style.cssText = originalStyle;
+    }, 2000);
+  }
+
+  // 从笔记列表导航到指定位置
+  async navigateToNote(note) {
+    if (!note || !note.cfi) {
+      console.warn('Invalid note data:', note);
+      return false;
+    }
+
+    // 如果当前章节与笔记章节不同，先切换章节
+    if (note.chapterId && this.currentChapter && note.chapterId !== this.currentChapter.id) {
+      await this.loadChapter(note.chapterId);
+    }
+
+    // 根据阅读模式导航
+    if (this.settings.readingMode === 'page') {
+      return await this.navigateToPositionInPagingMode(note.cfi);
+    } else {
+      // 滚动模式使用CFIManager
+      const cfiManager = new CFIManager(this.contentArea, this.currentChapter.id);
+      cfiManager.initialize();
+      const result = cfiManager.navigateToBookID(note.cfi);
+      cfiManager.destroy();
+      return result;
+    }
+  }
   
   // 下一页
   nextPage() {
@@ -447,6 +569,7 @@ class EPUBViewer {
       this.addTransitionEffect();
     } else {
       // 如果是最后一页，尝试跳转到下一章
+      console.log('End of chapter, moving to next chapter');
       this.nextChapter();
     }
   }
@@ -459,6 +582,7 @@ class EPUBViewer {
       this.addTransitionEffect();
     } else {
       // 如果是第一页，尝试跳转到上一章
+      console.log('Start of chapter, moving to previous chapter');
       this.previousChapter();
     }
   }
@@ -637,6 +761,70 @@ class EPUBViewer {
         margin: 1em auto;
       }
       
+      /* 翻页模式分栏样式 */
+      .paging-mode .double-column {
+        column-count: 2;
+        column-gap: 20px;
+        column-fill: auto;
+        column-rule: 1px solid #ddd;
+      }
+      
+      .paging-mode .single-column {
+        column-count: 1;
+      }
+      
+      .paging-mode .page-content {
+        break-inside: auto;
+      }
+      
+      .paging-mode .double-column p {
+        break-inside: auto;
+        margin-bottom: ${this.settings.paragraphSpacing};
+        text-align: ${this.settings.textAlign};
+        orphans: 2;
+        widows: 2;
+      }
+      
+      .paging-mode .double-column h1,
+      .paging-mode .double-column h2,
+      .paging-mode .double-column h3,
+      .paging-mode .double-column h4,
+      .paging-mode .double-column h5,
+      .paging-mode .double-column h6 {
+        break-after: avoid-column;
+        break-inside: avoid;
+        margin-top: 1.5em;
+        margin-bottom: 1em;
+      }
+      
+      /* 文本流动模式 */
+      .paging-mode .text-flow .double-column p {
+        break-inside: auto;
+      }
+      
+      .paging-mode .no-text-flow .double-column p {
+        break-inside: avoid;
+      }
+      
+      /* 增强的分栏控制 */
+      .paging-mode .double-column.text-flow {
+        column-fill: auto; /* 文字自动流动 */
+      }
+      
+      .paging-mode .double-column.no-text-flow {
+        column-fill: balance; /* 平衡填充 */
+      }
+      
+      /* 确保段落正确跨栏 */
+      .paging-mode .text-flow .double-column * {
+        break-inside: auto;
+      }
+      
+      .paging-mode .no-text-flow .double-column p,
+      .paging-mode .no-text-flow .double-column div {
+        break-inside: avoid;
+      }
+      
       .epub-toc-area {
         border-right: 1px solid #eee;
         padding-right: 20px;
@@ -731,11 +919,26 @@ class EPUBViewer {
   // 阅读模式设置
   setReadingMode(mode) {
     if (['scroll', 'page'].includes(mode)) {
+      const oldMode = this.settings.readingMode;
+      const oldScrollPosition = this.getCurrentScrollPosition();
+      const oldPageProgress = this.getCurrentPageProgress();
+      
       this.updateStyles({ readingMode: mode });
       
       // 重新渲染当前章节
       if (this.currentChapter) {
         this.renderChapter(this.currentChapter);
+        
+        // 恢复阅读位置
+        setTimeout(() => {
+          if (oldMode === 'scroll' && mode === 'page') {
+            // 从滚动模式切换到翻页模式：估算对应的页数
+            this.restorePositionFromScroll(oldScrollPosition);
+          } else if (oldMode === 'page' && mode === 'scroll') {
+            // 从翻页模式切换到滚动模式：估算对应的滚动位置
+            this.restorePositionFromPage(oldPageProgress);
+          }
+        }, 100); // 等待DOM更新完成
       }
     }
   }
@@ -743,12 +946,53 @@ class EPUBViewer {
   // 列布局设置
   setColumnLayout(layout) {
     if (['single', 'double'].includes(layout)) {
+      const oldLayout = this.settings.columnLayout;
+      const currentPosition = this.settings.readingMode === 'scroll' ? 
+        this.getCurrentScrollPosition() : this.getCurrentPageProgress();
+      
       this.updateStyles({ columnLayout: layout });
       
       // 重新渲染当前章节
       if (this.currentChapter) {
         this.renderChapter(this.currentChapter);
+        
+        // 恢复阅读位置
+        setTimeout(() => {
+          if (this.settings.readingMode === 'scroll') {
+            this.contentArea.scrollTop = currentPosition;
+          } else {
+            // 翻页模式下重新计算页数并跳转
+            const targetPage = Math.floor(currentPosition * this.totalPages);
+            this.currentPage = Math.max(0, Math.min(targetPage, this.totalPages - 1));
+            this.updatePagePosition();
+          }
+        }, 100);
       }
+    }
+  }
+
+  // 文本流动模式设置
+  setTextFlow(enabled) {
+    const currentPosition = this.settings.readingMode === 'scroll' ? 
+      this.getCurrentScrollPosition() : this.getCurrentPageProgress();
+    
+    this.updateStyles({ textFlow: enabled });
+    
+    // 重新渲染当前章节
+    if (this.currentChapter) {
+      this.renderChapter(this.currentChapter);
+      
+      // 恢复阅读位置
+      setTimeout(() => {
+        if (this.settings.readingMode === 'scroll') {
+          this.contentArea.scrollTop = currentPosition;
+        } else {
+          // 翻页模式下重新计算页数并跳转
+          const targetPage = Math.floor(currentPosition * this.totalPages);
+          this.currentPage = Math.max(0, Math.min(targetPage, this.totalPages - 1));
+          this.updatePagePosition();
+        }
+      }, 100);
     }
   }
   
@@ -779,6 +1023,69 @@ class EPUBViewer {
     if (themes[theme]) {
       this.updateStyles(themes[theme]);
     }
+  }
+  
+// 获取当前滚动位置
+  getCurrentScrollPosition() {
+    if (!this.contentArea) return 0;
+    
+    if (this.settings.readingMode === 'scroll') {
+      return this.contentArea.scrollTop;
+    } else {
+      // 翻页模式下，返回估算的滚动位置
+      const progress = this.getCurrentPageProgress();
+      const maxScroll = this.contentArea.scrollHeight - this.contentArea.clientHeight;
+      return Math.floor(progress * maxScroll);
+    }
+  }
+  
+  // 获取当前页面进度
+  getCurrentPageProgress() {
+    if (this.settings.readingMode === 'page' && this.totalPages > 0) {
+      return (this.currentPage + 1) / this.totalPages;
+    } else if (this.settings.readingMode === 'scroll' && this.contentArea) {
+      const maxScroll = this.contentArea.scrollHeight - this.contentArea.clientHeight;
+      if (maxScroll > 0) {
+        return this.contentArea.scrollTop / maxScroll;
+      }
+    }
+    return 0;
+  }
+  
+  // 从滚动位置恢复到翻页模式
+  restorePositionFromScroll(scrollPosition) {
+    if (!this.contentArea || this.totalPages <= 0) return;
+    
+    // 计算滚动进度
+    const maxScroll = this.contentArea.scrollHeight - this.contentArea.clientHeight;
+    const progress = maxScroll > 0 ? scrollPosition / maxScroll : 0;
+    
+    // 估算对应的页数
+    const targetPage = Math.floor(progress * this.totalPages);
+    const clampedPage = Math.max(0, Math.min(targetPage, this.totalPages - 1));
+    
+    // 跳转到目标页
+    this.currentPage = clampedPage;
+    this.updatePagePosition();
+    this.addTransitionEffect();
+    
+    console.log(`Restored to page ${clampedPage + 1}/${this.totalPages} from scroll position`);
+  }
+  
+  // 从翻页位置恢复到滚动模式
+  restorePositionFromPage(pageProgress) {
+    if (!this.contentArea) return;
+    
+    // 等待内容完全渲染后再计算
+    setTimeout(() => {
+      const maxScroll = this.contentArea.scrollHeight - this.contentArea.clientHeight;
+      const targetScroll = Math.floor(pageProgress * maxScroll);
+      
+      // 滚动到目标位置
+      this.contentArea.scrollTop = targetScroll;
+      
+      console.log(`Restored to scroll position ${targetScroll} from page progress ${pageProgress.toFixed(2)}`);
+    }, 200);
   }
   
   // 获取当前设置
@@ -887,8 +1194,342 @@ adjustLayout() {
     }
   }
   
-  // 按高度分割内容为多个页面
+  // 按高度分割内容为多个页面（支持文本流动）
   splitContentByHeight(contentElement, containerHeight) {
+    if (!contentElement) return [''];
+    
+    // 检查是否启用文本流动模式
+    const enableTextFlow = this.settings.textFlow !== false; // 默认启用
+    
+    if (enableTextFlow) {
+      return this.splitContentWithTextFlow(contentElement, containerHeight);
+    } else {
+      return this.splitContentByElement(contentElement, containerHeight);
+    }
+  }
+
+  // 支持文本流动的分页方法
+  splitContentWithTextFlow(contentElement, containerHeight) {
+    // 无论单栏还是双栏，都需要进行正常的分页
+    // 双栏模式下，每页内部使用CSS分栏实现文字流动
+    return this.splitContentByElement(contentElement, containerHeight);
+  }
+
+  // 流式处理文本节点
+  flowTextNode(textNode, targetPage, tempContainer, maxHeight, pages) {
+    const text = textNode.textContent.trim();
+    if (!text) return targetPage;
+    
+    // 按字符分割，支持更精细的控制
+    const chars = text.split('');
+    let currentText = '';
+    let charIndex = 0;
+    
+    while (charIndex < chars.length) {
+      // 尝试添加更多字符
+      let testText = currentText;
+      let testIndex = charIndex;
+      
+      while (testIndex < chars.length && testIndex < charIndex + 50) { // 每次测试最多50个字符
+        testText += chars[testIndex];
+        testIndex++;
+        
+        // 测量当前文本高度
+        tempContainer.innerHTML = targetPage.innerHTML + '<span>' + testText + '</span>';
+        const testHeight = tempContainer.scrollHeight;
+        
+        if (testHeight > maxHeight) {
+          // 超出高度，回退
+          testText = testText.slice(0, -1);
+          testIndex--;
+          break;
+        }
+      }
+      
+      if (testText.length > currentText.length) {
+        // 可以添加这些字符
+        currentText = testText;
+        charIndex = testIndex;
+      } else {
+        // 即使一个字符都加不进去，也需要强制添加
+        if (currentText.length === 0 && charIndex < chars.length) {
+          currentText = chars[charIndex];
+          charIndex++;
+        }
+        break;
+      }
+    }
+    
+    // 添加处理后的文本
+    if (currentText) {
+      const textSpan = document.createElement('span');
+      textSpan.textContent = currentText;
+      targetPage.appendChild(textSpan);
+      
+      // 检查是否需要分页
+      tempContainer.innerHTML = targetPage.innerHTML;
+      if (tempContainer.scrollHeight > maxHeight) {
+        // 移除刚添加的文本，开始新页面
+        targetPage.removeChild(textSpan);
+        pages.push(targetPage.innerHTML);
+        
+        // 在新页面添加文本
+        targetPage = document.createElement('div');
+        targetPage.appendChild(textSpan);
+      }
+    }
+    
+    // 处理剩余字符
+    if (charIndex < chars.length) {
+      const remainingText = chars.slice(charIndex).join('');
+      const remainingNode = document.createTextNode(remainingText);
+      return this.flowTextNode(remainingNode, targetPage, tempContainer, maxHeight, pages);
+    }
+    
+    return targetPage;
+  }
+
+  // 流式处理元素节点
+  flowElementNode(elementNode, targetPage, tempContainer, maxHeight, pages) {
+    const tagName = elementNode.tagName.toLowerCase();
+    const isBlockElement = ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'ul', 'ol', 'li', 'pre'].includes(tagName);
+    
+    if (!isBlockElement) {
+      // 内联元素，直接添加
+      targetPage.appendChild(elementNode.cloneNode(true));
+      return targetPage;
+    }
+    
+    // 创建元素副本
+    const elementCopy = elementNode.cloneNode(false);
+    
+    // 测量当前页面高度
+    tempContainer.innerHTML = targetPage.innerHTML;
+    tempContainer.appendChild(elementCopy);
+    const currentHeight = tempContainer.scrollHeight;
+    
+    // 处理元素内容
+    const contentResult = this.flowElementContent(elementNode, elementCopy, tempContainer, maxHeight - currentHeight, pages);
+    
+    // 检查是否超出页面高度
+    tempContainer.innerHTML = targetPage.innerHTML;
+    tempContainer.appendChild(elementCopy);
+    const finalHeight = tempContainer.scrollHeight;
+    
+    if (finalHeight > maxHeight && targetPage.children.length > 0) {
+      // 需要分页
+      pages.push(targetPage.innerHTML);
+      
+      // 在新页面添加元素
+      targetPage = document.createElement('div');
+      targetPage.appendChild(elementCopy);
+    }
+    
+    return targetPage;
+  }
+
+  // 流式处理元素内容
+  flowElementContent(sourceElement, targetElement, tempContainer, remainingHeight, pages) {
+    const childNodes = Array.from(sourceElement.childNodes);
+    
+    for (let i = 0; i < childNodes.length; i++) {
+      const child = childNodes[i];
+      
+      if (child.nodeType === Node.TEXT_NODE) {
+        this.flowTextNode(child, targetElement, tempContainer, remainingHeight, pages);
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        this.flowElementNode(child, targetElement, tempContainer, remainingHeight, pages);
+      }
+      
+      // 重新计算剩余高度
+      tempContainer.innerHTML = targetElement.innerHTML;
+      const usedHeight = tempContainer.scrollHeight;
+      remainingHeight = Math.max(0, remainingHeight - usedHeight);
+    }
+    
+    return { height: tempContainer.scrollHeight };
+  }
+
+  // 处理文本节点（支持分割）
+  processTextNode(textNode, targetPage, tempContainer, maxHeight, pages) {
+    if (!textNode.textContent.trim()) {
+      return targetPage;
+    }
+    
+    const text = textNode.textContent;
+    const words = text.split(/\s+/);
+    let currentText = '';
+    let remainingWords = [...words];
+    
+    while (remainingWords.length > 0) {
+      // 尝试添加下一个词
+      const testText = currentText + (currentText ? ' ' : '') + remainingWords[0];
+      
+      // 测量当前文本高度
+      tempContainer.innerHTML = targetPage.innerHTML + '<span>' + testText + '</span>';
+      const testHeight = tempContainer.scrollHeight;
+      
+      if (testHeight <= maxHeight) {
+        // 可以添加这个词
+        currentText = testText;
+        remainingWords.shift();
+      } else {
+        // 不能添加这个词，需要分页
+        if (currentText.trim()) {
+          // 保存当前页面的文本
+          const textSpan = document.createElement('span');
+          textSpan.textContent = currentText;
+          targetPage.appendChild(textSpan);
+          
+          // 开始新页面
+          pages.push(targetPage.innerHTML);
+          targetPage = document.createElement('div');
+          currentText = '';
+        }
+        
+        // 如果单个词就超出页面高度，强制添加
+        if (remainingWords.length === 1) {
+          const textSpan = document.createElement('span');
+          textSpan.textContent = remainingWords[0];
+          targetPage.appendChild(textSpan);
+          remainingWords.shift();
+        }
+      }
+    }
+    
+    // 添加剩余的文本
+    if (currentText.trim()) {
+      const textSpan = document.createElement('span');
+      textSpan.textContent = currentText;
+      targetPage.appendChild(textSpan);
+    }
+    
+    return targetPage;
+  }
+
+  // 处理元素节点
+  processElementNode(elementNode, targetPage, tempContainer, maxHeight, pages) {
+    const tagName = elementNode.tagName.toLowerCase();
+    
+    // 检查是否是块级元素
+    const isBlockElement = ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'ul', 'ol', 'li', 'pre'].includes(tagName);
+    
+    if (isBlockElement) {
+      // 创建元素副本
+      const elementCopy = elementNode.cloneNode(false);
+      
+      // 测量空元素的高度
+      tempContainer.innerHTML = targetPage.innerHTML;
+      tempContainer.appendChild(elementCopy);
+      const emptyHeight = tempContainer.scrollHeight;
+      
+      // 处理元素内容
+      let contentHeight = 0;
+      const childNodes = Array.from(elementNode.childNodes);
+      
+      for (let i = 0; i < childNodes.length; i++) {
+        const child = childNodes[i];
+        
+        if (child.nodeType === Node.TEXT_NODE) {
+          // 处理文本内容
+          const textResult = this.processTextInElement(child, elementCopy, tempContainer, maxHeight - emptyHeight, pages);
+          contentHeight += textResult.height;
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+          // 处理子元素
+          const childResult = this.processElementNode(child, elementCopy, tempContainer, maxHeight - emptyHeight, pages);
+          contentHeight += childResult.height;
+        }
+        
+        // 检查是否超出页面高度
+        tempContainer.innerHTML = targetPage.innerHTML;
+        tempContainer.appendChild(elementCopy);
+        const currentHeight = tempContainer.scrollHeight;
+        
+        if (currentHeight > maxHeight) {
+          // 保存当前页面（不包括当前元素）
+          pages.push(targetPage.innerHTML);
+          
+          // 开始新页面，添加当前元素
+          targetPage = document.createElement('div');
+          targetPage.appendChild(elementCopy);
+          
+          // 重置测量
+          emptyHeight = 0;
+          contentHeight = 0;
+        }
+      }
+      
+      // 添加元素到目标页面
+      if (elementCopy.childNodes.length > 0) {
+        targetPage.appendChild(elementCopy);
+      }
+      
+      return { height: contentHeight + emptyHeight };
+    } else {
+      // 内联元素，直接添加
+      targetPage.appendChild(elementNode.cloneNode(true));
+      return { height: 0 };
+    }
+  }
+
+  // 在元素中处理文本
+  processTextInElement(textNode, parentElement, tempContainer, remainingHeight, pages) {
+    if (!textNode.textContent.trim()) {
+      return { height: 0 };
+    }
+    
+    const text = textNode.textContent;
+    const words = text.split(/\s+/);
+    let currentText = '';
+    let processedHeight = 0;
+    
+    for (let i = 0; i < words.length; i++) {
+      const testText = currentText + (currentText ? ' ' : '') + words[i];
+      
+      // 创建测试文本节点
+      const testSpan = document.createElement('span');
+      testSpan.textContent = testText;
+      
+      // 测量高度
+      tempContainer.innerHTML = parentElement.innerHTML;
+      tempContainer.appendChild(testSpan);
+      const testHeight = tempContainer.scrollHeight;
+      
+      if (testHeight <= remainingHeight) {
+        // 可以添加这个词
+        currentText = testText;
+      } else {
+        // 不能添加，需要分页
+        if (currentText.trim()) {
+          const textSpan = document.createElement('span');
+          textSpan.textContent = currentText;
+          parentElement.appendChild(textSpan);
+          processedHeight += testSpan.offsetHeight;
+        }
+        
+        // 开始新页面
+        pages.push(parentElement.innerHTML);
+        parentElement.innerHTML = '';
+        remainingHeight = tempContainer.clientHeight;
+        
+        // 重置并继续处理剩余词汇
+        currentText = words[i];
+      }
+    }
+    
+    // 添加剩余文本
+    if (currentText.trim()) {
+      const textSpan = document.createElement('span');
+      textSpan.textContent = currentText;
+      parentElement.appendChild(textSpan);
+      processedHeight += textSpan.offsetHeight;
+    }
+    
+    return { height: processedHeight };
+  }
+
+  // 按元素分割内容（原有方法，作为备选）
+  splitContentByElement(contentElement, containerHeight) {
     if (!contentElement) return [''];
     
     const pages = [];
@@ -896,16 +1537,25 @@ adjustLayout() {
     
     // 创建临时容器来测量内容
     const tempContainer = document.createElement('div');
+    
+    // 根据分栏设置计算宽度
+    let containerWidth = this.contentArea.clientWidth - 80;
+    if (this.settings.columnLayout === 'double') {
+      // 双栏模式：减去栏间距，每栏宽度约为页面的一半
+      containerWidth = Math.floor((this.contentArea.clientWidth - 80 - 20) / 2); // 20px是栏间距
+    }
+    
     tempContainer.style.cssText = `
       position: absolute;
       top: -9999px;
       left: -9999px;
-      width: ${this.contentArea.clientWidth - 80}px;
+      width: ${containerWidth}px;
       padding: 40px;
       font-size: ${this.settings.fontSize};
       line-height: ${this.settings.lineHeight};
       font-family: ${this.settings.fontFamily};
       visibility: hidden;
+      ${this.settings.columnLayout === 'double' ? 'column-count: 1;' : ''}
     `;
     document.body.appendChild(tempContainer);
     
@@ -967,10 +1617,15 @@ adjustLayout() {
     return pages.length > 0 ? pages : [''];
   }
   
-  // 销毁
+// 销毁
   destroy() {
     if (this.reader) {
       this.reader.destroy();
+    }
+    
+    // 清理全局引用
+    if (typeof window !== 'undefined' && window.viewer === this) {
+      delete window.viewer;
     }
     
     // 清理样式
@@ -996,6 +1651,10 @@ adjustLayout() {
     this.currentChapter = null;
     this.isLoaded = false;
     this.book = null;
+    this.currentPage = 0;
+    this.totalPages = 1;
+    this.isPagingMode = false;
+    this.horizontalPages = null;
   }
 }
 

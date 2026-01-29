@@ -86,12 +86,24 @@ class StyleController {
         loose: { name: '宽松', height: '2.0' }
       },
       
-      // 段间距预设
-      paragraphSpacings: {
-        tight: { name: '紧密', spacing: '0.5em' },
-        normal: { name: '正常', spacing: '1em' },
-        loose: { name: '宽松', spacing: '1.5em' }
-      }
+       // 段间距预设
+       paragraphSpacings: {
+         tight: { name: '紧密', spacing: '0.5em' },
+         normal: { name: '正常', spacing: '1em' },
+         loose: { name: '宽松', spacing: '1.5em' }
+       },
+       
+       // 分栏模式预设
+       columnLayouts: {
+         single: { name: '单栏', layout: 'single' },
+         double: { name: '双栏', layout: 'double' }
+       },
+       
+       // 文本流动模式预设
+       textFlowModes: {
+         enabled: { name: '启用', enabled: true },
+         disabled: { name: '禁用', enabled: false }
+       }
     };
   }
   
@@ -193,13 +205,51 @@ class StyleController {
     this.viewer.setParagraphSpacing(spacing.spacing);
   }
   
-  // 获取所有段间距
-  getParagraphSpacings() {
-    return Object.keys(this.presets.paragraphSpacings).map(key => ({
-      key,
-      ...this.presets.paragraphSpacings[key]
-    }));
-  }
+// 获取所有段间距
+   getParagraphSpacings() {
+     return Object.keys(this.presets.paragraphSpacings).map(key => ({
+       key,
+       ...this.presets.paragraphSpacings[key]
+     }));
+   }
+   
+   // 应用分栏布局
+   applyColumnLayout(layoutKey) {
+     const layout = this.presets.columnLayouts[layoutKey];
+     if (!layout) {
+       console.warn(`分栏布局 "${layoutKey}" 不存在`);
+       return;
+     }
+     
+     this.viewer.setColumnLayout(layout.layout);
+   }
+   
+   // 获取所有分栏布局
+   getColumnLayouts() {
+     return Object.keys(this.presets.columnLayouts).map(key => ({
+       key,
+       ...this.presets.columnLayouts[key]
+     }));
+   }
+   
+   // 应用文本流动模式
+   applyTextFlowMode(modeKey) {
+     const mode = this.presets.textFlowModes[modeKey];
+     if (!mode) {
+       console.warn(`文本流动模式 "${modeKey}" 不存在`);
+       return;
+     }
+     
+     this.viewer.setTextFlow(mode.enabled);
+   }
+   
+   // 获取所有文本流动模式
+   getTextFlowModes() {
+     return Object.keys(this.presets.textFlowModes).map(key => ({
+       key,
+       ...this.presets.textFlowModes[key]
+     }));
+   }
   
   // 自定义颜色
   setFontColor(color) {
@@ -323,11 +373,29 @@ class StyleController {
           </select>
         </div>
         
-        <div class="control-group">
+<div class="control-group">
           <label>行高:</label>
           <select id="lineheight-select">
             ${this.getLineHeights().map(height => 
               `<option value="${height.key}">${height.name}</option>`
+            ).join('')}
+          </select>
+        </div>
+        
+        <div class="control-group">
+          <label>分栏:</label>
+          <select id="column-select">
+            ${this.getColumnLayouts().map(layout => 
+              `<option value="${layout.key}">${layout.name}</option>`
+            ).join('')}
+          </select>
+        </div>
+        
+        <div class="control-group">
+          <label>文本流动:</label>
+          <select id="textflow-select">
+            ${this.getTextFlowModes().map(mode => 
+              `<option value="${mode.key}">${mode.name}</option>`
             ).join('')}
           </select>
         </div>
@@ -429,11 +497,23 @@ class StyleController {
       this.applyFontSize(e.target.value);
     });
     
-    // 行高选择
-    const lineHeightSelect = panel.querySelector('#lineheight-select');
-    lineHeightSelect.addEventListener('change', (e) => {
-      this.applyLineHeight(e.target.value);
-    });
+// 行高选择
+     const lineHeightSelect = panel.querySelector('#lineheight-select');
+     lineHeightSelect.addEventListener('change', (e) => {
+       this.applyLineHeight(e.target.value);
+     });
+     
+     // 分栏选择
+     const columnSelect = panel.querySelector('#column-select');
+     columnSelect.addEventListener('change', (e) => {
+       this.applyColumnLayout(e.target.value);
+     });
+     
+     // 文本流动选择
+     const textFlowSelect = panel.querySelector('#textflow-select');
+     textFlowSelect.addEventListener('change', (e) => {
+       this.applyTextFlowMode(e.target.value);
+     });
     
     // 文字颜色
     const fontColorInput = panel.querySelector('#fontcolor-input');

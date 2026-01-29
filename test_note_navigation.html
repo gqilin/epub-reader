@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>翻页模式笔记导航测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .notes-panel {
+            width: 300px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .reader-panel {
+            flex: 1;
+            background: white;
+            height: 600px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        .note-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .note-item:hover {
+            background-color: #f0f0f0;
+        }
+        .note-item.active {
+            background-color: #e3f2fd;
+        }
+        .controls {
+            margin-bottom: 20px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .controls button {
+            margin-right: 10px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background: #1976d2;
+            color: white;
+            cursor: pointer;
+        }
+        .controls button:hover {
+            background: #1565c0;
+        }
+        .controls button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .mode-toggle {
+            margin-left: 20px;
+        }
+        .epub-content-area {
+            height: 100%;
+            overflow: hidden;
+            padding: 20px;
+        }
+        .paging-mode .epub-content-area {
+            overflow: hidden;
+        }
+        .horizontal-pages {
+            display: flex;
+            height: 100%;
+            transition: transform 0.3s ease;
+        }
+        .page {
+            min-width: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .paging-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .paging-controls button {
+            background: transparent;
+            color: white;
+            border: 1px solid white;
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        .test-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e8f5e8;
+            border-radius: 8px;
+            border-left: 4px solid #4caf50;
+        }
+    </style>
+</head>
+<body>
+    <h1>翻页模式笔记导航测试</h1>
+    
+    <div class="controls">
+        <button onclick="toggleReadingMode()">切换阅读模式</button>
+        <span class="mode-toggle">当前模式: <span id="currentMode">滚动</span></span>
+    </div>
+
+    <div class="container">
+        <div class="notes-panel">
+            <h3>笔记列表</h3>
+            <div id="notesList">
+                <div class="note-item" data-note='{"id":"1","type":"note","title":"第一章笔记","content":"这是第一章的重要笔记","cfi":"book:/chapter1/[2]/p[1]","chapterId":"chapter1"}'>
+                    <strong>第一章笔记</strong>
+                    <p>这是第一章的重要笔记</p>
+                </div>
+                <div class="note-item" data-note='{"id":"2","type":"highlight","title":"重要段落","content":"需要重点关注的内容","cfi":"book:/chapter1/[4]/p[3]","chapterId":"chapter1"}'>
+                    <strong>重要段落</strong>
+                    <p>需要重点关注的内容</p>
+                </div>
+                <div class="note-item" data-note='{"id":"3","type":"note","title":"第二章笔记","content":"第二章的笔记内容","cfi":"book:/chapter2/[3]/p[2]","chapterId":"chapter2"}'>
+                    <strong>第二章笔记</strong>
+                    <p>第二章的笔记内容</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="reader-panel">
+            <div id="contentArea" class="epub-content-area">
+                <div class="chapter-content">
+                    <h1>第一章</h1>
+                    <p>这是第一章的内容段落1。</p>
+                    <p>这是第一章的内容段落2。</p>
+                    <p>这是第一章的内容段落3。</p>
+                    <p>这是第一章的内容段落4。</p>
+                    <p>这是第一章的内容段落5。</p>
+                    <p>这是第一章的内容段落6。</p>
+                    <p>这是第一章的内容段落7。</p>
+                    <p>这是第一章的内容段落8。</p>
+                    <p>这是第一章的内容段落9。</p>
+                    <p>这是第一章的内容段落10。</p>
+                    <p>这是第一章的内容段落11。</p>
+                    <p>这是第一章的内容段落12。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-info">
+        <h3>测试说明</h3>
+        <p>1. 点击"切换阅读模式"按钮在滚动模式和翻页模式之间切换</p>
+        <p>2. 点击左侧笔记列表中的任意笔记项</p>
+        <p>3. 观察阅读器是否正确导航到笔记对应的位置</p>
+        <p>4. 在翻页模式下，应该能够跳转到包含笔记内容的正确页面</p>
+        <p>5. 在滚动模式下，应该能够滚动到笔记对应的正确位置</p>
+    </div>
+
+    <script type="module">
+        // 模拟EPUBViewer类（简化版本用于测试）
+        class MockEPUBViewer {
+            constructor() {
+                this.contentArea = document.getElementById('contentArea');
+                this.settings = {
+                    readingMode: 'scroll'
+                };
+                this.isPagingMode = false;
+                this.currentPage = 0;
+                this.totalPages = 1;
+                this.horizontalPages = null;
+                this.currentChapter = { id: 'chapter1' };
+                
+                // 设置全局引用
+                window.viewer = this;
+            }
+
+            async navigateToNote(note) {
+                console.log('导航到笔记:', note);
+                
+                // 模拟章节切换
+                if (note.chapterId !== this.currentChapter.id) {
+                    console.log('切换到章节:', note.chapterId);
+                    this.currentChapter = { id: note.chapterId };
+                    this.updateContent();
+                }
+
+                // 根据阅读模式导航
+                if (this.settings.readingMode === 'page') {
+                    return await this.navigateToPositionInPagingMode(note.cfi);
+                } else {
+                    return this.navigateToPositionInScrollMode(note.cfi);
+                }
+            }
+
+            async navigateToPositionInPagingMode(cfi) {
+                console.log('翻页模式导航到CFI:', cfi);
+                
+                if (!this.isPagingMode) {
+                    console.warn('当前不在翻页模式');
+                    return false;
+                }
+
+                // 模拟查找目标页面
+                const targetPage = Math.floor(Math.random() * this.totalPages);
+                this.currentPage = targetPage;
+                this.updatePagePosition();
+                
+                // 模拟高亮效果
+                this.highlightTargetElement();
+                
+                return true;
+            }
+
+            navigateToPositionInScrollMode(cfi) {
+                console.log('滚动模式导航到CFI:', cfi);
+                
+                // 模拟滚动到目标位置
+                const targetScroll = Math.floor(Math.random() * 500);
+                this.contentArea.scrollTop = targetScroll;
+                
+                // 模拟高亮效果
+                this.highlightTargetElement();
+                
+                return true;
+            }
+
+            highlightTargetElement() {
+                // 简单的高亮效果
+                const content = this.contentArea.querySelector('.chapter-content');
+                if (content) {
+                    content.style.backgroundColor = 'yellow';
+                    setTimeout(() => {
+                        content.style.backgroundColor = '';
+                    }, 2000);
+                }
+            }
+
+            setReadingMode(mode) {
+                this.settings.readingMode = mode;
+                this.isPagingMode = mode === 'page';
+                
+                if (mode === 'page') {
+                    this.contentArea.classList.add('paging-mode');
+                    this.setupPagingMode();
+                } else {
+                    this.contentArea.classList.remove('paging-mode');
+                    this.cleanupPagingMode();
+                }
+                
+                document.getElementById('currentMode').textContent = mode === 'page' ? '翻页' : '滚动';
+            }
+
+            setupPagingMode() {
+                // 创建翻页模式结构
+                const content = this.contentArea.querySelector('.chapter-content');
+                if (!content) return;
+
+                // 简单的分页模拟
+                const pages = Math.ceil(content.offsetHeight / 300);
+                this.totalPages = pages;
+
+                // 创建横向页面容器
+                const horizontalPages = document.createElement('div');
+                horizontalPages.className = 'horizontal-pages';
+                
+                for (let i = 0; i < pages; i++) {
+                    const page = document.createElement('div');
+                    page.className = 'page';
+                    page.innerHTML = `<h3>第${i + 1}页</h3><p>这是第${i + 1}页的内容</p>`;
+                    horizontalPages.appendChild(page);
+                }
+
+                this.contentArea.innerHTML = '';
+                this.contentArea.appendChild(horizontalPages);
+                this.horizontalPages = horizontalPages;
+
+                // 添加翻页控制
+                this.addPagingControls();
+            }
+
+            cleanupPagingMode() {
+                this.updateContent();
+            }
+
+            addPagingControls() {
+                const controls = document.createElement('div');
+                controls.className = 'paging-controls';
+                controls.innerHTML = `
+                    <button onclick="viewer.previousPage()">上一页</button>
+                    <span id="pageInfo">1 / ${this.totalPages}</span>
+                    <button onclick="viewer.nextPage()">下一页</button>
+                `;
+                this.contentArea.appendChild(controls);
+            }
+
+            updatePagePosition() {
+                if (!this.horizontalPages) return;
+                
+                const translateX = -this.currentPage * 100;
+                this.horizontalPages.style.transform = `translateX(${translateX}%)`;
+                this.updatePagingControls();
+            }
+
+            updatePagingControls() {
+                const pageInfo = document.getElementById('pageInfo');
+                if (pageInfo) {
+                    pageInfo.textContent = `${this.currentPage + 1} / ${this.totalPages}`;
+                }
+            }
+
+            previousPage() {
+                if (this.currentPage > 0) {
+                    this.currentPage--;
+                    this.updatePagePosition();
+                }
+            }
+
+            nextPage() {
+                if (this.currentPage < this.totalPages - 1) {
+                    this.currentPage++;
+                    this.updatePagePosition();
+                }
+            }
+
+            updateContent() {
+                this.contentArea.innerHTML = `
+                    <div class="chapter-content">
+                        <h1>${this.currentChapter.id === 'chapter1' ? '第一章' : '第二章'}</h1>
+                        <p>这是${this.currentChapter.id === 'chapter1' ? '第一章' : '第二章'}的内容段落1。</p>
+                        <p>这是${this.currentChapter.id === 'chapter1' ? '第一章' : '第二章'}的内容段落2。</p>
+                        <p>这是${this.currentChapter.id === 'chapter1' ? '第一章' : '第二章'}的内容段落3。</p>
+                        <p>这是${this.currentChapter.id === 'chapter1' ? '第一章' : '第二章'}的内容段落4。</p>
+                        <p>这是${this.currentChapter.id === 'chapter1' ? '第一章' : '第二章'}的内容段落5。</p>
+                        <p>这是${this.currentChapter.id === 'chapter1' ? '第一章' : '第二章'}的内容段落6。</p>
+                        <p>这是${this.currentChapter.id === 'chapter1' ? '第一章' : '第二章'}的内容段落7。</p>
+                        <p>这是${this.currentChapter.id === 'chapter1' ? '第一章' : '第二章'}的内容段落8。</p>
+                        <p>这是${this.currentChapter.id === 'chapter1' ? '第一章' : '第二章'}的内容段落9。</p>
+                        <p>这是${this.currentChapter.id === 'chapter1' ? '第一章' : '第二章'}的内容段落10。</p>
+                    </div>
+                `;
+            }
+        }
+
+        // 初始化viewer
+        const viewer = new MockEPUBViewer();
+
+        // 切换阅读模式
+        window.toggleReadingMode = function() {
+            const newMode = viewer.settings.readingMode === 'scroll' ? 'page' : 'scroll';
+            viewer.setReadingMode(newMode);
+        };
+
+        // 绑定笔记点击事件
+        document.querySelectorAll('.note-item').forEach(item => {
+            item.addEventListener('click', async (e) => {
+                // 移除所有活动状态
+                document.querySelectorAll('.note-item').forEach(note => {
+                    note.classList.remove('active');
+                });
+                
+                // 添加活动状态
+                item.classList.add('active');
+                
+                // 获取笔记数据
+                const noteData = JSON.parse(item.dataset.note);
+                
+                // 导航到笔记位置
+                const success = await viewer.navigateToNote(noteData);
+                console.log('导航结果:', success);
+            });
+        });
+
+        console.log('测试页面已加载，可以开始测试笔记导航功能');
+    </script>
+</body>
+</html>

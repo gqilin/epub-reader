@@ -4,6 +4,15 @@ import commonjs from '@rollup/plugin-commonjs';
 import { babel } from '@rollup/plugin-babel';
 import terser from '@rollup/plugin-terser';
 
+// 创建自定义的TypeScript配置
+const createTSConfig = (overrides = {}) => ({
+  tsconfig: './tsconfig.json',
+  declaration: false,
+  declarationMap: false,
+  sourceMap: true,
+  ...overrides
+});
+
 export default [
   // UMD build
   {
@@ -18,11 +27,7 @@ export default [
     plugins: [
       nodeResolve(),
       commonjs(),
-      typescript({
-        tsconfig: './tsconfig.json',
-        declaration: false,
-        sourceMap: true
-      }),
+      typescript(createTSConfig()),
       babel({
         babelHelpers: 'bundled',
         presets: ['@babel/preset-env'],
@@ -44,6 +49,7 @@ export default [
       typescript({
         tsconfig: './tsconfig.json',
         declaration: true,
+        declarationMap: true,
         sourceMap: true
       })
     ]
@@ -61,11 +67,7 @@ export default [
     plugins: [
       nodeResolve(),
       commonjs(),
-      typescript({
-        tsconfig: './tsconfig.json',
-        declaration: false,
-        sourceMap: true
-      }),
+      typescript(createTSConfig()),
       babel({
         babelHelpers: 'bundled',
         presets: ['@babel/preset-env'],
