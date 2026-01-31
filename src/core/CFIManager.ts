@@ -65,10 +65,17 @@ export class CFIManager {
     return this.positionTracker.getScrollPosition();
   }
 
-  /**
+/**
    * 恢复到指定Book ID位置
    */
   navigateToBookID(cfi: CFI | string, options?: { align?: 'start' | 'center' | 'end' }): boolean {
+    // 检查是否在翻页模式，如果是，则使用特殊的翻页模式导航
+    const viewer = (window as any).viewer;
+    if (viewer && viewer.settings && viewer.settings.readingMode === 'page' && viewer.isPagingMode) {
+      return viewer.navigateToPositionInPagingMode(cfi);
+    }
+    
+    // 默认使用滚动模式导航
     return this.positionTracker.restorePosition(cfi, options);
   }
 
