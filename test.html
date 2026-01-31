@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EPUB 阅读器</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f0f2f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .header-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .file-input {
+            display: none;
+        }
+        .btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+        .btn:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 320px;
+            background: white;
+            border-right: 1px solid #e1e4e8;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .book-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            margin: -20px -20px 20px -20px;
+            border-radius: 0 0 12px 12px;
+        }
+        .book-cover-placeholder {
+            width: 120px;
+            height: 160px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+            margin: 0 auto 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            backdrop-filter: blur(10px);
+        }
+        .book-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .book-author {
+            font-size: 14px;
+            opacity: 0.9;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        .book-meta {
+            font-size: 12px;
+            opacity: 0.8;
+            line-height: 1.4;
+        }
+        .toc-section {
+            margin-bottom: 25px;
+        }
+        .toc-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .toc-item {
+            padding: 12px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            line-height: 1.4;
+            border-left: 3px solid transparent;
+        }
+        .toc-item:hover {
+            background: #f8f9fa;
+            border-left-color: #667eea;
+        }
+        .toc-item.active {
+            background: linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%);
+            border-left-color: #667eea;
+            font-weight: 500;
+        }
+        .reading-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .toolbar {
+            background: white;
+            border-bottom: 1px solid #e1e4e8;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .toolbar-group {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .toolbar-btn {
+            background: white;
+            border: 1px solid #ddd;
+            color: #555;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .toolbar-btn:hover {
+            background: #f8f9fa;
+            border-color: #667eea;
+            color: #667eea;
+        }
+        .toolbar-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        .page-indicator {
+            font-size: 14px;
+            color: #666;
+            padding: 6px 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 30px 40px;
+            line-height: 1.8;
+            color: #333;
+            background: white;
+        }
+        .content::-webkit-scrollbar {
+            width: 8px;
+        }
+        .content::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        .content::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+        .content::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+        .chapter-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e1e4e8;
+        }
+        .chapter-body {
+            font-size: 16px;
+            line-height: 1.8;
+        }
+        .chapter-body p {
+            margin-bottom: 16px;
+            text-align: justify;
+        }
+        .chapter-body img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 20px auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+        }
+        .chapter-body h1, .chapter-body h2, .chapter-body h3 {
+            margin: 24px 0 12px 0;
+            color: #2c3e50;
+        }
+        .chapter-body h1 { font-size: 24px; }
+        .chapter-body h2 { font-size: 20px; }
+        .chapter-body h3 { font-size: 18px; }
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background: white;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .status-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: all 0.3s ease;
+        }
+        .status-message.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .status-message.success {
+            border-left: 4px solid #27ae60;
+        }
+        .status-message.error {
+            border-left: 4px solid #e74c3c;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="header">
+            <h1>📚 EPUB 阅读器</h1>
+            <div class="header-controls">
+                <input type="file" id="fileInput" class="file-input" accept=".epub">
+                <button class="btn" onclick="loadEpubFile()">📁 选择文件</button>
+                <button class="btn" onclick="loadDefaultBook()">📖 默认书籍</button>
+            </div>
+        </div>
+
+        <div class="main-content" id="mainContent" style="display: none;">
+            <div class="sidebar">
+                <div class="sidebar-content">
+                    <div class="book-info">
+                        <div class="book-cover-placeholder">📚</div>
+                        <div class="book-title" id="bookTitle">电子书标题</div>
+                        <div class="book-author" id="bookAuthor">作者</div>
+                        <div class="book-meta" id="bookMeta">
+                            <div id="bookLanguage"></div>
+                            <div id="bookPublisher"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="toc-section">
+                        <div class="toc-title">📑 目录</div>
+                        <div id="toc"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="reading-area">
+                <div class="toolbar">
+                    <div class="toolbar-group">
+                        <button class="toolbar-btn" onclick="previousChapter()">⬅️ 上一章</button>
+                        <div class="page-indicator" id="pageIndicator">第 1 章 / 共 1 章</div>
+                        <button class="toolbar-btn" onclick="nextChapter()">下一章 ➡️</button>
+                    </div>
+                    
+                    <div class="toolbar-group">
+                        <button class="toolbar-btn" onclick="adjustFontSize('decrease')">A-</button>
+                        <button class="toolbar-btn" onclick="adjustFontSize('reset')">A</button>
+                        <button class="toolbar-btn" onclick="adjustFontSize('increase')">A+</button>
+                        <button class="toolbar-btn" onclick="toggleTheme()">🌙</button>
+                    </div>
+                </div>
+
+                <div class="content" id="chapterContent">
+                    <div class="chapter-title">请选择章节</div>
+                    <div class="chapter-body">
+                        <p>请从左侧目录选择要阅读的章节，或加载EPUB文件开始阅读。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="loading" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <div>正在加载EPUB文件...</div>
+        </div>
+    </div>
+
+    <div class="status-message" id="statusMessage"></div>
+
+    <script src="reader/dist/epub-reader.js"></script>
+    <script>
+        let currentBook = null;
+        let currentChapterIndex = 0;
+        let currentFontSize = 16;
+        let isDarkTheme = false;
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'flex';
+            document.getElementById('mainContent').style.display = 'none';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'flex';
+        }
+
+        function showStatus(message, type = 'success') {
+            const statusEl = document.getElementById('statusMessage');
+            statusEl.textContent = message;
+            statusEl.className = `status-message ${type} show`;
+            
+            setTimeout(() => {
+                statusEl.classList.remove('show');
+            }, 3000);
+        }
+
+        async function loadEpubFile() {
+            const fileInput = document.getElementById('fileInput');
+            fileInput.click();
+            
+            fileInput.onchange = async (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    await loadEpub(file);
+                }
+            };
+        }
+
+        async function loadDefaultBook() {
+            try {
+                showLoading();
+                showStatus('正在加载默认书籍...', 'success');
+                
+                const response = await fetch('books/book.epub');
+                if (!response.ok) {
+                    throw new Error('无法加载默认书籍');
+                }
+                
+                const arrayBuffer = await response.arrayBuffer();
+                await loadEpubFromArrayBuffer(arrayBuffer);
+                
+                showStatus('默认书籍加载完成', 'success');
+            } catch (error) {
+                showStatus('加载失败: ' + error.message, 'error');
+                console.error('Error loading default book:', error);
+                hideLoading();
+            }
+        }
+
+        async function loadEpub(file) {
+            try {
+                showLoading();
+                showStatus(`正在加载 ${file.name}...`, 'success');
+                
+                const arrayBuffer = await file.arrayBuffer();
+                await loadEpubFromArrayBuffer(arrayBuffer);
+                
+                showStatus(`${file.name} 加载完成`, 'success');
+            } catch (error) {
+                showStatus('加载失败: ' + error.message, 'error');
+                console.error('Error loading EPUB:', error);
+                hideLoading();
+            }
+        }
+
+        async function loadEpubFromArrayBuffer(arrayBuffer) {
+            const reader = new EpubReaderLib.EpubReader();
+            currentBook = await reader.load(arrayBuffer);
+            
+            await reader.loadAllChapters();
+            
+            displayMetadata();
+            displayToc();
+            
+            if (currentBook.chapters.length > 0) {
+                displayChapter(0);
+            }
+            
+            hideLoading();
+        }
+
+        function displayMetadata() {
+            const metadata = currentBook.metadata;
+            
+            document.getElementById('bookTitle').textContent = metadata.title || '未知标题';
+            document.getElementById('bookAuthor').textContent = metadata.author || '未知作者';
+            
+            let metaHtml = '';
+            if (metadata.language) metaHtml += `<div>🌐 语言: ${metadata.language}</div>`;
+            if (metadata.publisher) metaHtml += `<div>🏢 出版社: ${metadata.publisher}</div>`;
+            if (metadata.description) metaHtml += `<div style="margin-top: 8px;">📝 ${metadata.description.substring(0, 100)}...</div>`;
+            
+            document.getElementById('bookMeta').innerHTML = metaHtml;
+        }
+
+        function displayToc() {
+            const tocDiv = document.getElementById('toc');
+            const chapters = currentBook.chapters;
+            
+            let html = '';
+            chapters.forEach((chapter, index) => {
+                html += `<div class="toc-item ${index === 0 ? 'active' : ''}" onclick="displayChapter(${index})">
+                    ${chapter.title}
+                </div>`;
+            });
+            
+            tocDiv.innerHTML = html;
+            updatePageIndicator();
+        }
+
+        async function displayChapter(index) {
+            if (index < 0 || index >= currentBook.chapters.length) return;
+            
+            currentChapterIndex = index;
+            const chapter = currentBook.chapters[index];
+            
+            const contentDiv = document.getElementById('chapterContent');
+            contentDiv.innerHTML = `
+                <h1 class="chapter-title">${chapter.title}</h1>
+                <div class="chapter-body">${chapter.content}</div>
+            `;
+            
+            document.querySelectorAll('.toc-item').forEach((item, i) => {
+                item.classList.toggle('active', i === index);
+            });
+            
+            updatePageIndicator();
+            contentDiv.scrollTop = 0;
+        }
+
+        function updatePageIndicator() {
+            const indicator = document.getElementById('pageIndicator');
+            if (currentBook && currentBook.chapters.length > 0) {
+                indicator.textContent = `第 ${currentChapterIndex + 1} 章 / 共 ${currentBook.chapters.length} 章`;
+            }
+        }
+
+        function previousChapter() {
+            if (currentChapterIndex > 0) {
+                displayChapter(currentChapterIndex - 1);
+            }
+        }
+
+        function nextChapter() {
+            if (currentBook && currentChapterIndex < currentBook.chapters.length - 1) {
+                displayChapter(currentChapterIndex + 1);
+            }
+        }
+
+        function adjustFontSize(action) {
+            const contentDiv = document.querySelector('.chapter-body');
+            let currentSize = parseInt(window.getComputedStyle(contentDiv).fontSize);
+            
+            if (action === 'increase') {
+                currentSize += 2;
+                if (currentSize > 24) currentSize = 24;
+            } else if (action === 'decrease') {
+                currentSize -= 2;
+                if (currentSize < 12) currentSize = 12;
+            } else if (action === 'reset') {
+                currentSize = 16;
+            }
+            
+            contentDiv.style.fontSize = currentSize + 'px';
+            currentFontSize = currentSize;
+        }
+
+        function toggleTheme() {
+            isDarkTheme = !isDarkTheme;
+            const contentDiv = document.getElementById('chapterContent');
+            const readingArea = document.querySelector('.reading-area');
+            
+            if (isDarkTheme) {
+                contentDiv.style.background = '#1e1e1e';
+                contentDiv.style.color = '#e0e0e0';
+                readingArea.style.background = '#252526';
+            } else {
+                contentDiv.style.background = 'white';
+                contentDiv.style.color = '#333';
+                readingArea.style.background = 'white';
+            }
+        }
+
+        // 页面加载完成
+        window.addEventListener('load', () => {
+            showStatus('阅读器已准备就绪', 'success');
+        });
+
+        // 键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            if (!currentBook) return;
+            
+            if (e.key === 'ArrowLeft' && !e.ctrlKey) {
+                e.preventDefault();
+                previousChapter();
+            } else if (e.key === 'ArrowRight' && !e.ctrlKey) {
+                e.preventDefault();
+                nextChapter();
+            } else if (e.key === '+' && e.ctrlKey) {
+                e.preventDefault();
+                adjustFontSize('increase');
+            } else if (e.key === '-' && e.ctrlKey) {
+                e.preventDefault();
+                adjustFontSize('decrease');
+            }
+        });
+    </script>
+</body>
+</html>
