@@ -20,6 +20,7 @@ class PaginationManager {
       showControls: options.showControls !== false,
       showProgress: options.showProgress !== false,
       clickToNavigate: options.clickToNavigate !== false,
+      continuousPagination: options.continuousPagination !== false,
       ...options
     };
     
@@ -35,6 +36,7 @@ class PaginationManager {
     // 事件回调
     this.onPageChange = options.onPageChange || null;
     this.onPaginationReady = options.onPaginationReady || null;
+    this.onChapterChangeRequest = options.onChapterChangeRequest || null;
     
     // 绑定方法
     this.handleResize = this.handleResize.bind(this);
@@ -304,8 +306,26 @@ class PaginationManager {
     if (this.state.currentPage < this.state.totalPages - 1) {
       this.goToPage(this.state.currentPage + 1);
       return true;
+    } else if (this.options.continuousPagination && this.onChapterChangeRequest) {
+      // 请求加载下一章
+      this.onChapterChangeRequest('next');
+      return 'chapter-request';
     }
     return false;
+  }
+
+  /**
+   * 检查是否还有下一页
+   */
+  hasNextPage() {
+    return this.state.currentPage < this.state.totalPages - 1;
+  }
+
+  /**
+   * 检查是否还有上一页
+   */
+  hasPreviousPage() {
+    return this.state.currentPage > 0;
   }
   
   /**
@@ -315,6 +335,10 @@ class PaginationManager {
     if (this.state.currentPage > 0) {
       this.goToPage(this.state.currentPage - 1);
       return true;
+    } else if (this.options.continuousPagination && this.onChapterChangeRequest) {
+      // 请求加载上一章
+      this.onChapterChangeRequest('previous');
+      return 'chapter-request';
     }
     return false;
   }
@@ -405,10 +429,10 @@ class PaginationManager {
     const nextBtn = this.contentArea.querySelector('.epub-pagination-btn.next');
     
     if (prevBtn) {
-      prevBtn.disabled = this.state.currentPage === 0;
+      prevBtn.disabled = this.state.currentPage === 0 && !this.options.continuousPagination;
     }
     if (nextBtn) {
-      nextBtn.disabled = this.state.currentPage >= this.state.totalPages - 1;
+      nextBtn.disabled = this.state.currentPage >= this.state.totalPages - 1 && !this.options.continuousPagination;
     }
   }
   
