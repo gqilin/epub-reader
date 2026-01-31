@@ -1,12 +1,26 @@
 import JSZip from 'jszip';
-import { EpubBook, EpubReaderOptions } from './types';
+import { EpubBook, EpubReaderOptions, ReadingSettings, ReadingState, Chapter, FontSizeAction, ThemeType } from './types';
 
 export class EpubReader {
   private zip: JSZip | null = null;
   private book: EpubBook;
+  private state: ReadingState;
 
   constructor(private options: EpubReaderOptions = {}) {
     this.book = new EpubBook();
+    this.state = {
+      currentChapterIndex: 0,
+      book: null,
+      settings: {
+        fontSize: 16,
+        minFontSize: 12,
+        maxFontSize: 24,
+        isDarkTheme: false,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        lineHeight: 1.8
+      },
+      contentElement: null
+    };
   }
 
   async load(data: ArrayBuffer | Uint8Array | Blob): Promise<EpubBook> {
@@ -14,6 +28,16 @@ export class EpubReader {
     await this.parseContainer();
     await this.parseOpf();
     await this.parseNcx();
+    
+            // 初始化阅读器状态
+            this.state.book = this.book;
+            this.state.currentChapterIndex = 0;
+            
+            // 如果有内容元素，渲染第一章
+            if (this.state.contentElement && this.book.chapters.length > 0) {
+                this.renderChapter(0);
+            }
+    
     return this.book;
   }
 
@@ -284,6 +308,11 @@ export class EpubReader {
         console.warn(`Failed to load chapter ${href}:`, error);
       }
     }
+    
+    // 如果有内容元素，渲染第一章
+    if (this.state.contentElement && this.book.chapters.length > 0) {
+      this.renderChapter(0);
+    }
   }
 
   private async processCssResources(content: string, basePath: string): Promise<string> {
@@ -459,6 +488,311 @@ export class EpubReader {
     const mimeType = this.getMimeType(resourcePath);
     const data = await resourceFile.async('base64');
     return `data:${mimeType};base64,${data}`;
+  }
+
+  // 阅读器管理方法
+  navigateToChapter(index: number): boolean {
+    if (!this.state.book || index < 0 || index >= this.state.book.chapters.length) {
+      return false;
+    }
+    
+    this.state.currentChapterIndex = index;
+    
+    // 如果有内容元素，直接渲染章节
+    if (this.state.contentElement) {
+      return this.renderChapter(index);
+    }
+    
+    return true;
+  }
+
+  previousChapter(): boolean {
+    if (this.state.currentChapterIndex > 0) {
+      this.state.currentChapterIndex--;
+      
+      // 如果有内容元素，直接渲染章节
+      if (this.state.contentElement) {
+        return this.renderChapter();
+      }
+      
+      return true;
+    }
+    return false;
+  }
+
+  nextChapter(): boolean {
+    if (this.state.book && this.state.currentChapterIndex < this.state.book.chapters.length - 1) {
+      this.state.currentChapterIndex++;
+      
+      // 如果有内容元素，直接渲染章节
+      if (this.state.contentElement) {
+        return this.renderChapter();
+      }
+      
+      return true;
+    }
+    return false;
+  }
+
+  getCurrentChapter(): Chapter | null {
+    if (!this.state.book) return null;
+    return this.state.book.chapters[this.state.currentChapterIndex] || null;
+  }
+
+  getCurrentChapterIndex(): number {
+    return this.state.currentChapterIndex;
+  }
+
+  getTotalChapters(): number {
+    return this.state.book ? this.state.book.chapters.length : 0;
+  }
+
+  adjustFontSize(action: FontSizeAction, customSize?: number | string): number {
+    const { fontSize, minFontSize, maxFontSize } = this.state.settings;
+    
+    switch (action) {
+      case 'increase':
+        this.state.settings.fontSize = Math.min(fontSize + 2, maxFontSize);
+        break;
+      case 'decrease':
+        this.state.settings.fontSize = Math.max(fontSize - 2, minFontSize);
+        break;
+      case 'reset':
+        this.state.settings.fontSize = 16;
+        break;
+      case 'custom':
+        if (customSize !== undefined) {
+          let size = typeof customSize === 'string' ? 
+            parseInt(customSize.replace('px', '')) : customSize;
+          
+          if (!isNaN(size) && size >= minFontSize && size <= maxFontSize) {
+            this.state.settings.fontSize = size;
+          } else {
+            console.warn(`Invalid font size: ${customSize}. Using range ${minFontSize}-${maxFontSize}px`);
+          }
+        }
+        break;
+    }
+    
+    // 如果有内容元素，应用新的字体大小
+    if (this.state.contentElement) {
+      this.applyTextStyles();
+    }
+    
+    return this.state.settings.fontSize;
+  }
+
+  getCurrentFontSize(): number {
+    return this.state.settings.fontSize;
+  }
+
+  setTheme(theme: ThemeType): void {
+    this.state.settings.isDarkTheme = theme === 'dark';
+    
+    // 如果有内容元素，应用新主题
+    if (this.state.contentElement) {
+      this.applyThemeStyles();
+    }
+  }
+
+  toggleTheme(): boolean {
+    this.state.settings.isDarkTheme = !this.state.settings.isDarkTheme;
+    
+    // 如果有内容元素，应用新主题
+    if (this.state.contentElement) {
+      this.applyThemeStyles();
+    }
+    
+    return this.state.settings.isDarkTheme;
+  }
+
+  getCurrentTheme(): boolean {
+    return this.state.settings.isDarkTheme;
+  }
+
+  setFontFamily(fontFamily: string): void {
+    this.state.settings.fontFamily = fontFamily;
+    
+    // 如果有内容元素，应用新字体
+    if (this.state.contentElement) {
+      this.applyTextStyles();
+    }
+  }
+
+  setLineHeight(lineHeight: number): void {
+    this.state.settings.lineHeight = lineHeight;
+    
+    // 如果有内容元素，应用新行高
+    if (this.state.contentElement) {
+      this.applyTextStyles();
+    }
+  }
+
+  getReadingSettings(): ReadingSettings {
+    return { ...this.state.settings };
+  }
+
+  getPageInfo(): { current: number; total: number; text: string } {
+    const current = this.state.currentChapterIndex + 1;
+    const total = this.getTotalChapters();
+    return {
+      current,
+      total,
+      text: `第 ${current} 章 / 共 ${total} 章`
+    };
+  }
+
+  // 阅读器状态
+  getReadingState(): ReadingState {
+    return {
+      currentChapterIndex: this.state.currentChapterIndex,
+      book: this.state.book,
+      settings: { ...this.state.settings },
+      contentElement: this.state.contentElement
+    };
+  }
+
+  // DOM管理方法
+  setContentElement(elementId: string): boolean {
+    const element = document.getElementById(elementId);
+    if (!element) {
+      console.error(`Element with id '${elementId}' not found`);
+      return false;
+    }
+    
+    this.state.contentElement = element;
+    this.applyCurrentStyles();
+    return true;
+  }
+
+  getContentElement(): HTMLElement | null {
+    return this.state.contentElement;
+  }
+
+  private applyCurrentStyles(): void {
+    if (!this.state.contentElement) return;
+    
+    this.applyThemeStyles();
+    this.applyTextStyles();
+  }
+
+  private applyThemeStyles(): void {
+    if (!this.state.contentElement) return;
+    
+    const element = this.state.contentElement;
+    const isDark = this.state.settings.isDarkTheme;
+    
+    // 主背景和文字颜色
+    element.style.backgroundColor = isDark ? '#1e1e1e' : 'white';
+    element.style.color = isDark ? '#e0e0e0' : '#333';
+    
+    // 标题颜色
+    const titles = element.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    titles.forEach(title => {
+      (title as HTMLElement).style.color = isDark ? '#ffffff' : '#2c3e50';
+    });
+  }
+
+  private applyTextStyles(): void {
+    if (!this.state.contentElement) return;
+    
+    const element = this.state.contentElement;
+    const settings = this.state.settings;
+    
+    // 查找或创建内容容器
+    let contentContainer = element.querySelector('.chapter-body') as HTMLElement;
+    if (!contentContainer) {
+      contentContainer = document.createElement('div');
+      contentContainer.className = 'chapter-body';
+      if (element.firstChild) {
+        element.insertBefore(contentContainer, element.firstChild.nextSibling);
+      } else {
+        element.appendChild(contentContainer);
+      }
+    }
+    
+    // 应用文本样式
+    contentContainer.style.fontSize = settings.fontSize + 'px';
+    contentContainer.style.fontFamily = settings.fontFamily;
+    contentContainer.style.lineHeight = settings.lineHeight.toString();
+    contentContainer.style.textAlign = 'justify';
+    contentContainer.style.marginBottom = '16px';
+  }
+
+  renderChapter(chapterIndex?: number): boolean {
+    if (!this.state.contentElement) {
+      console.error('Content element not set. Call setContentElement() first.');
+      return false;
+    }
+    
+    if (!this.state.book || this.state.book.chapters.length === 0) {
+      console.error('No book loaded or book has no chapters');
+      return false;
+    }
+    
+    // 使用传入的索引或当前索引
+    const targetIndex = chapterIndex !== undefined ? chapterIndex : this.state.currentChapterIndex;
+    
+    if (targetIndex < 0 || targetIndex >= this.state.book.chapters.length) {
+      console.error(`Invalid chapter index: ${targetIndex}`);
+      return false;
+    }
+    
+    const chapter = this.state.book.chapters[targetIndex];
+    const element = this.state.contentElement;
+    
+    // 清空内容
+    element.innerHTML = '';
+    
+    // 添加章节标题
+    const titleElement = document.createElement('h1');
+    titleElement.className = 'chapter-title';
+    titleElement.textContent = chapter.title;
+    titleElement.style.cssText = `
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #e1e4e8;
+    `;
+    element.appendChild(titleElement);
+    
+    // 添加章节内容
+    const contentContainer = document.createElement('div');
+    contentContainer.className = 'chapter-body';
+    contentContainer.innerHTML = chapter.content;
+    
+    // 处理图片样式
+    const images = contentContainer.querySelectorAll('img');
+    images.forEach(img => {
+      (img as HTMLElement).style.cssText = `
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 20px auto;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+      `;
+    });
+    
+    // 处理段落样式
+    const paragraphs = contentContainer.querySelectorAll('p');
+    paragraphs.forEach(p => {
+      (p as HTMLElement).style.cssText = `
+        margin-bottom: 16px;
+        text-align: justify;
+      `;
+    });
+    
+    element.appendChild(contentContainer);
+    
+    // 更新当前章节索引
+    this.state.currentChapterIndex = targetIndex;
+    
+    // 应用当前样式
+    this.applyCurrentStyles();
+    
+    return true;
   }
 
   getBook(): EpubBook {

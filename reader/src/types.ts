@@ -33,3 +33,23 @@ export class EpubBook {
 export interface EpubReaderOptions {
   encoding?: string;
 }
+
+export interface ReadingSettings {
+  fontSize: number;
+  minFontSize: number;
+  maxFontSize: number;
+  isDarkTheme: boolean;
+  fontFamily: string;
+  lineHeight: number;
+}
+
+export interface ReadingState {
+  currentChapterIndex: number;
+  book: EpubBook | null;
+  settings: ReadingSettings;
+  contentElement: HTMLElement | null;
+}
+
+export type FontSizeAction = 'increase' | 'decrease' | 'reset' | 'custom';
+
+export type ThemeType = 'light' | 'dark';

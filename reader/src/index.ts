@@ -4,7 +4,11 @@ export {
   EpubMetadata, 
   TocItem, 
   Chapter, 
-  EpubReaderOptions 
+  EpubReaderOptions,
+  ReadingSettings,
+  ReadingState,
+  FontSizeAction,
+  ThemeType
 } from './types';
 
 // Also export as default for UMD compatibility

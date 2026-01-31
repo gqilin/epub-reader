@@ -214,14 +214,6 @@
         .content::-webkit-scrollbar-thumb:hover {
             background: #a8a8a8;
         }
-        .chapter-title {
-            font-size: 28px;
-            font-weight: 700;
-            color: #2c3e50;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid #e1e4e8;
-        }
         .chapter-body {
             font-size: 16px;
             line-height: 1.8;
@@ -330,16 +322,16 @@
                         <button class="toolbar-btn" onclick="nextChapter()">下一章 ➡️</button>
                     </div>
                     
-                    <div class="toolbar-group">
-                        <button class="toolbar-btn" onclick="adjustFontSize('decrease')">A-</button>
-                        <button class="toolbar-btn" onclick="adjustFontSize('reset')">A</button>
-                        <button class="toolbar-btn" onclick="adjustFontSize('increase')">A+</button>
-                        <button class="toolbar-btn" onclick="toggleTheme()">🌙</button>
-                    </div>
+        <div class="toolbar-group">
+            <button class="toolbar-btn" onclick="adjustFontSize('decrease')">A-</button>
+            <button class="toolbar-btn" onclick="adjustFontSize('reset')">A</button>
+            <button class="toolbar-btn" onclick="adjustFontSize('increase')">A+</button>
+            <button class="toolbar-btn" onclick="setCustomFontSize(20)">20px</button>
+            <button class="toolbar-btn" onclick="toggleTheme()">🌙</button>
+        </div>
                 </div>
 
                 <div class="content" id="chapterContent">
-                    <div class="chapter-title">请选择章节</div>
                     <div class="chapter-body">
                         <p>请从左侧目录选择要阅读的章节，或加载EPUB文件开始阅读。</p>
                     </div>
@@ -357,10 +349,14 @@
 
     <script src="reader/dist/epub-reader.js"></script>
     <script>
-        let currentBook = null;
-        let currentChapterIndex = 0;
-        let currentFontSize = 16;
-        let isDarkTheme = false;
+        let epubReader = null;
+
+        // 初始化阅读器
+        function initReader() {
+            epubReader = new EpubReaderLib.EpubReader();
+            // 设置内容区域
+            epubReader.setContentElement('chapterContent');
+        }
 
         function showLoading() {
             document.getElementById('loading').style.display = 'flex';
@@ -432,23 +428,26 @@
         }
 
         async function loadEpubFromArrayBuffer(arrayBuffer) {
-            const reader = new EpubReaderLib.EpubReader();
-            currentBook = await reader.load(arrayBuffer);
-            
-            await reader.loadAllChapters();
-            
-            displayMetadata();
-            displayToc();
-            
-            if (currentBook.chapters.length > 0) {
-                displayChapter(0);
+            try {
+                await epubReader.load(arrayBuffer);
+                await epubReader.loadAllChapters();
+                
+                displayMetadata();
+                displayToc();
+                
+                // 章节渲染已由库自动处理
+                updatePageIndicator();
+                
+                hideLoading();
+            } catch (error) {
+                showStatus('解析EPUB文件失败: ' + error.message, 'error');
+                hideLoading();
             }
-            
-            hideLoading();
         }
 
         function displayMetadata() {
-            const metadata = currentBook.metadata;
+            const book = epubReader.getBook();
+            const metadata = book.metadata;
             
             document.getElementById('bookTitle').textContent = metadata.title || '未知标题';
             document.getElementById('bookAuthor').textContent = metadata.author || '未知作者';
@@ -463,11 +462,13 @@
 
         function displayToc() {
             const tocDiv = document.getElementById('toc');
-            const chapters = currentBook.chapters;
+            const book = epubReader.getBook();
+            const chapters = book.chapters;
+            const currentIndex = epubReader.getCurrentChapterIndex();
             
             let html = '';
             chapters.forEach((chapter, index) => {
-                html += `<div class="toc-item ${index === 0 ? 'active' : ''}" onclick="displayChapter(${index})">
+                html += `<div class="toc-item ${index === currentIndex ? 'active' : ''}" onclick="displayChapter(${index})">
                     ${chapter.title}
                 </div>`;
             });
@@ -476,87 +477,58 @@
             updatePageIndicator();
         }
 
-        async function displayChapter(index) {
-            if (index < 0 || index >= currentBook.chapters.length) return;
-            
-            currentChapterIndex = index;
-            const chapter = currentBook.chapters[index];
-            
-            const contentDiv = document.getElementById('chapterContent');
-            contentDiv.innerHTML = `
-                <h1 class="chapter-title">${chapter.title}</h1>
-                <div class="chapter-body">${chapter.content}</div>
-            `;
-            
+        function displayChapter(index) {
+            if (epubReader.navigateToChapter(index)) {
+                updateTocHighlight();
+                updatePageIndicator();
+                
+                // 滚动到顶部
+                const contentDiv = document.getElementById('chapterContent');
+                if (contentDiv) {
+                    contentDiv.scrollTop = 0;
+                }
+            }
+        }
+
+        function updateTocHighlight() {
+            const currentIndex = epubReader.getCurrentChapterIndex();
             document.querySelectorAll('.toc-item').forEach((item, i) => {
-                item.classList.toggle('active', i === index);
+                item.classList.toggle('active', i === currentIndex);
             });
-            
-            updatePageIndicator();
-            contentDiv.scrollTop = 0;
         }
 
         function updatePageIndicator() {
-            const indicator = document.getElementById('pageIndicator');
-            if (currentBook && currentBook.chapters.length > 0) {
-                indicator.textContent = `第 ${currentChapterIndex + 1} 章 / 共 ${currentBook.chapters.length} 章`;
-            }
+            const pageInfo = epubReader.getPageInfo();
+            document.getElementById('pageIndicator').textContent = pageInfo.text;
         }
 
         function previousChapter() {
-            if (currentChapterIndex > 0) {
-                displayChapter(currentChapterIndex - 1);
-            }
+            epubReader.previousChapter();
+            updateTocHighlight();
+            updatePageIndicator();
         }
 
         function nextChapter() {
-            if (currentBook && currentChapterIndex < currentBook.chapters.length - 1) {
-                displayChapter(currentChapterIndex + 1);
-            }
+            epubReader.nextChapter();
+            updateTocHighlight();
+            updatePageIndicator();
         }
 
         function adjustFontSize(action) {
-            const contentDiv = document.querySelector('.chapter-body');
-            let currentSize = parseInt(window.getComputedStyle(contentDiv).fontSize);
-            
-            if (action === 'increase') {
-                currentSize += 2;
-                if (currentSize > 24) currentSize = 24;
-            } else if (action === 'decrease') {
-                currentSize -= 2;
-                if (currentSize < 12) currentSize = 12;
-            } else if (action === 'reset') {
-                currentSize = 16;
-            }
-            
-            contentDiv.style.fontSize = currentSize + 'px';
-            currentFontSize = currentSize;
+            epubReader.adjustFontSize(action);
         }
 
         function toggleTheme() {
-            isDarkTheme = !isDarkTheme;
-            const contentDiv = document.getElementById('chapterContent');
-            const readingArea = document.querySelector('.reading-area');
-            
-            if (isDarkTheme) {
-                contentDiv.style.background = '#1e1e1e';
-                contentDiv.style.color = '#e0e0e0';
-                readingArea.style.background = '#252526';
-            } else {
-                contentDiv.style.background = 'white';
-                contentDiv.style.color = '#333';
-                readingArea.style.background = 'white';
-            }
+            epubReader.toggleTheme();
         }
 
-        // 页面加载完成
-        window.addEventListener('load', () => {
-            showStatus('阅读器已准备就绪', 'success');
-        });
+        function setCustomFontSize(size) {
+            epubReader.adjustFontSize('custom', size + 'px');
+        }
 
         // 键盘快捷键
         document.addEventListener('keydown', (e) => {
-            if (!currentBook) return;
+            if (!epubReader) return;
             
             if (e.key === 'ArrowLeft' && !e.ctrlKey) {
                 e.preventDefault();
@@ -571,6 +543,11 @@
                 e.preventDefault();
                 adjustFontSize('decrease');
             }
+        });
+
+        // 页面加载完成
+        window.addEventListener('load', () => {
+            initReader();
         });
     </script>
 </body>
