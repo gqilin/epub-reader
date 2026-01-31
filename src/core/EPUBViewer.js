@@ -1,4 +1,5 @@
 import EPUBReader from './EPUBParser.js';
+import PaginationManager from './PaginationManager.js';
 
 class EPUBViewer {
   constructor(options = {}) {
@@ -26,6 +27,22 @@ class EPUBViewer {
       ...options.settings
     };
     
+    // 翻页模式设置
+    this.pagination = {
+      enabled: options.pagination?.enabled || false,
+      mode: options.pagination?.mode || 'scroll', // 'scroll' | 'pagination'
+      columns: options.pagination?.columns || 1,
+      columnGap: options.pagination?.columnGap || 40,
+      animate: options.pagination?.animate !== false,
+      animationDuration: options.pagination?.animationDuration || 300,
+      showControls: options.pagination?.showControls !== false,
+      showProgress: options.pagination?.showProgress !== false,
+      clickToNavigate: options.pagination?.clickToNavigate !== false
+    };
+    
+    // 翻页管理器
+    this.paginationManager = null;
+    
     // 状态
     this.currentChapter = null;
     this.isLoaded = false;
@@ -35,6 +52,7 @@ class EPUBViewer {
     this.onChapterChange = options.onChapterChange || null;
     this.onLoad = options.onLoad || null;
     this.onError = options.onError || null;
+    this.onPageChange = options.onPageChange || null;
     
     // 初始化
     this.init();
@@ -244,20 +262,15 @@ class EPUBViewer {
   renderChapter(chapter) {
     if (!this.contentArea) return;
     
-    // 清理之前的内容
-    this.contentArea.innerHTML = '';
+    // 清理之前的内容和翻页管理器
+    if (this.paginationManager) {
+      this.paginationManager.destroy();
+      this.paginationManager = null;
+    }
     
     // 创建章节容器
     const chapterContainer = document.createElement('div');
     chapterContainer.className = 'epub-chapter';
-    
-    // 添加章节标题
-    if (chapter.title) {
-      const titleElement = document.createElement('h1');
-      titleElement.className = 'chapter-title';
-      titleElement.textContent = chapter.title;
-      chapterContainer.appendChild(titleElement);
-    }
     
     // 添加章节内容
     const contentElement = document.createElement('div');
@@ -269,11 +282,58 @@ class EPUBViewer {
     
     chapterContainer.appendChild(contentElement);
     
-    // 添加到内容区域
-    this.contentArea.appendChild(chapterContainer);
+    // 根据模式决定如何渲染
+    if (this.pagination.enabled && this.pagination.mode === 'pagination') {
+      // 翻页模式
+      this.renderPaginationMode(chapterContainer);
+    } else {
+      // 滚动模式
+      this.contentArea.innerHTML = '';
+      this.contentArea.appendChild(chapterContainer);
+      this.contentArea.scrollTop = 0;
+    }
+  }
+  
+  // 翻页模式渲染
+  renderPaginationMode(chapterContainer) {
+    // 获取章节内容（不包含标题）
+    const chapterContent = chapterContainer.querySelector('.chapter-content');
+    const contentHTML = chapterContent ? chapterContent.innerHTML : chapterContainer.innerHTML;
     
-    // 滚动到顶部
-    this.contentArea.scrollTop = 0;
+    // 清空内容区域
+    this.contentArea.innerHTML = '';
+    
+    // 初始化翻页管理器
+    this.paginationManager = new PaginationManager({
+      container: this.container,
+      contentArea: this.contentArea,
+      mode: 'pagination',
+      columns: this.pagination.columns,
+      columnGap: this.pagination.columnGap,
+      animate: this.pagination.animate,
+      animationDuration: this.pagination.animationDuration,
+      showControls: this.pagination.showControls,
+      showProgress: this.pagination.showProgress,
+      clickToNavigate: this.pagination.clickToNavigate,
+      onPageChange: (pageInfo) => {
+        if (this.onPageChange) {
+          this.onPageChange(pageInfo);
+        }
+      },
+      onPaginationReady: (info) => {
+        // 翻页准备就绪
+        console.log('Pagination ready:', info);
+      }
+    });
+    
+    // 设置内容（只设置章节内容，不包含标题）
+    this.paginationManager.setContent(contentHTML);
+    
+    // 重新处理内容中的图片和链接（因为DOM被重新创建了）
+    const content = this.contentArea.querySelector('.epub-pagination-content');
+    if (content) {
+      this.processContent(content);
+    }
   }
   
   // 处理内容中的元素
@@ -569,6 +629,12 @@ class EPUBViewer {
       this.reader.destroy();
     }
     
+    // 销毁翻页管理器
+    if (this.paginationManager) {
+      this.paginationManager.destroy();
+      this.paginationManager = null;
+    }
+    
     // 清理样式
     const style = document.querySelector('style[data-epub-viewer]');
     if (style) {
@@ -592,6 +658,98 @@ class EPUBViewer {
     this.currentChapter = null;
     this.isLoaded = false;
     this.book = null;
+  }
+  
+  // ==================== 翻页模式方法 ====================
+  
+  /**
+   * 设置翻页模式
+   * @param {boolean} enabled - 是否启用翻页模式
+   */
+  setPaginationMode(enabled) {
+    this.pagination.enabled = enabled;
+    this.pagination.mode = enabled ? 'pagination' : 'scroll';
+    
+    // 重新渲染当前章节
+    if (this.currentChapter) {
+      this.renderChapter(this.currentChapter);
+    }
+  }
+  
+  /**
+   * 切换阅读模式
+   */
+  toggleReadingMode() {
+    this.setPaginationMode(!this.pagination.enabled);
+    return this.pagination.enabled;
+  }
+  
+  /**
+   * 获取当前阅读模式
+   */
+  getReadingMode() {
+    return this.pagination.enabled ? 'pagination' : 'scroll';
+  }
+  
+  /**
+   * 翻到下一页
+   */
+  nextPage() {
+    if (this.paginationManager && this.pagination.enabled) {
+      const hasNext = this.paginationManager.nextPage();
+      if (!hasNext) {
+        // 当前章节没有下一页了，尝试加载下一章
+        return this.nextChapter();
+      }
+      return true;
+    }
+    return false;
+  }
+  
+  /**
+   * 翻到上一页
+   */
+  previousPage() {
+    if (this.paginationManager && this.pagination.enabled) {
+      const hasPrev = this.paginationManager.previousPage();
+      if (!hasPrev) {
+        // 当前章节没有上一页了，尝试加载上一章
+        return this.previousChapter();
+      }
+      return true;
+    }
+    return false;
+  }
+  
+  /**
+   * 跳转到指定页
+   */
+  goToPage(pageIndex) {
+    if (this.paginationManager && this.pagination.enabled) {
+      return this.paginationManager.goToPage(pageIndex);
+    }
+    return false;
+  }
+  
+  /**
+   * 获取当前页码信息
+   */
+  getPageInfo() {
+    if (this.paginationManager && this.pagination.enabled) {
+      return this.paginationManager.getPageInfo();
+    }
+    return { currentPage: 0, totalPages: 0, progress: 0 };
+  }
+  
+  /**
+   * 更新翻页设置
+   */
+  updatePaginationOptions(options) {
+    this.pagination = { ...this.pagination, ...options };
+    
+    if (this.paginationManager) {
+      this.paginationManager.updateOptions(options);
+    }
   }
 }
 

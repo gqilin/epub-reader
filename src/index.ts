@@ -14,6 +14,8 @@ export { default as EPUBReader } from './core/EPUBParser';
 export { default as EPUBViewer } from './core/EPUBViewer';
 // @ts-ignore
 export { default as StyleController } from './core/StyleController';
+// @ts-ignore
+export { default as PaginationManager } from './core/PaginationManager';
 
 // 导出Book ID系统
 export * from './core/BookIDManager';

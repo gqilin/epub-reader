@@ -5,6 +5,8 @@ import EPUBReader from './core/EPUBParser';
 import EPUBViewer from './core/EPUBViewer';
 // @ts-ignore
 import StyleController from './core/StyleController';
+// @ts-ignore
+import PaginationManager from './core/PaginationManager';
 
 // 创建主类，包含其他功能
 class EPUBReaderMain extends EPUBReader {
@@ -14,6 +16,10 @@ class EPUBReaderMain extends EPUBReader {
   
   static get StyleController(): typeof StyleController {
     return StyleController;
+  }
+  
+  static get PaginationManager(): typeof PaginationManager {
+    return PaginationManager;
   }
 }
 

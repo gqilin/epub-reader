@@ -312,6 +312,12 @@
             border-color: #2196f3;
         }
 
+        .preset-buttons button.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
         /* 主内容区域 */
         .main-content {
             flex: 1;
@@ -677,6 +683,21 @@
             <!-- 样式控制 -->
             <div class="style-controls">
                 <div class="control-group">
+                    <label>阅读模式</label>
+                    <div class="preset-buttons">
+                        <button id="scrollModeBtn" onclick="setReadingMode('scroll')" class="active">📜 滚动</button>
+                        <button id="paginationModeBtn" onclick="setReadingMode('pagination')">📖 翻页</button>
+                    </div>
+                </div>
+                <div class="control-group" id="paginationControls" style="display: none;">
+                    <label>翻页设置</label>
+                    <div class="preset-buttons">
+                        <button onclick="prevPage()" title="上一页">◀</button>
+                        <span id="pageInfo" style="padding: 6px; font-size: 0.85rem;">- / -</span>
+                        <button onclick="nextPage()" title="下一页">▶</button>
+                    </div>
+                </div>
+                <div class="control-group">
                     <label>主题</label>
                     <div class="preset-buttons">
                         <button onclick="applyTheme('light')">浅色</button>
@@ -747,6 +768,9 @@
     <!-- 提示消息 -->
     <div class="toast" id="toast"></div>
 
+    <!-- 引入翻页样式 -->
+    <link rel="stylesheet" href="./src/styles/pagination.css">
+    
     <!-- 引入库 -->
     <script src="./dist/epubreader.js"></script>
     
@@ -789,6 +813,8 @@
                     updateNavigationButtons();
                     // 章节切换后恢复高亮
                     setTimeout(() => restoreHighlightsForCurrentChapter(), 100);
+                    // 更新翻页信息
+                    updatePaginationInfo();
                 },
                 onLoad: function(book) {
                     currentBookId = generateBookId(book);
@@ -801,6 +827,9 @@
                 },
                 onError: function(error) {
                     showToast('加载失败: ' + error.message, 'error');
+                },
+                onPageChange: function(pageInfo) {
+                    updatePaginationDisplay(pageInfo);
                 }
             });
         }
@@ -828,6 +857,17 @@
                 if (e.key === 'Escape') {
                     closeNoteModal();
                     hideHighlightToolbar();
+                }
+                
+                // 翻页模式下的左右箭头导航
+                if (viewer && viewer.pagination && viewer.pagination.enabled) {
+                    if (e.key === 'ArrowLeft') {
+                        e.preventDefault();
+                        prevPage();
+                    } else if (e.key === 'ArrowRight') {
+                        e.preventDefault();
+                        nextPage();
+                    }
                 }
             });
         }
@@ -1318,6 +1358,53 @@
                 await viewer.nextChapter();
             } catch (error) {
                 showToast('无法跳转到下一章', 'error');
+            }
+        }
+
+        // ==================== 翻页模式功能 ====================
+        function setReadingMode(mode) {
+            if (!viewer) return;
+            
+            const isPagination = mode === 'pagination';
+            viewer.setPaginationMode(isPagination);
+            
+            // 更新按钮状态
+            document.getElementById('scrollModeBtn').classList.toggle('active', !isPagination);
+            document.getElementById('paginationModeBtn').classList.toggle('active', isPagination);
+            
+            // 显示/隐藏翻页控制
+            document.getElementById('paginationControls').style.display = isPagination ? 'block' : 'none';
+            
+            // 更新页码显示
+            if (isPagination) {
+                updatePaginationInfo();
+            }
+            
+            showToast(isPagination ? '已切换到翻页模式' : '已切换到滚动模式', 'success');
+        }
+        
+        function prevPage() {
+            if (!viewer) return;
+            viewer.previousPage();
+        }
+        
+        function nextPage() {
+            if (!viewer) return;
+            viewer.nextPage();
+        }
+        
+        function updatePaginationInfo() {
+            if (!viewer || !viewer.pagination.enabled) return;
+            
+            const pageInfo = viewer.getPageInfo();
+            updatePaginationDisplay(pageInfo);
+        }
+        
+        function updatePaginationDisplay(pageInfo) {
+            if (!pageInfo) return;
+            const pageInfoEl = document.getElementById('pageInfo');
+            if (pageInfoEl) {
+                pageInfoEl.textContent = `${pageInfo.currentPage + 1} / ${pageInfo.totalPages}`;
             }
         }
 
