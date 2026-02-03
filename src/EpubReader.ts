@@ -8,6 +8,10 @@ import {
   EpubTableOfContents,
   EpubChapter,
   EpubReaderOptions,
+  CFI,
+  CFIPathComponent,
+  CFIJumpOptions,
+  CFICursorPosition,
 } from './types';
 
 // XML解析器包装器 - 处理浏览器兼容性
@@ -133,6 +137,171 @@ class XMLParser {
     }
 
     return obj;
+  }
+}
+
+// CFI解析器类
+class CFIParser {
+  static parse(cfi: string): CFI {
+    // 移除开头和结尾的epub()包装
+    const cleanCFI = cfi.replace(/^epub\(|\)$/g, '');
+    
+    // 解析章节路径和本地路径
+    const [globalPath, localPath] = cleanCFI.split('!');
+    const [epubType, ...globalPathParts] = globalPath.split(',');
+    
+    // 解析路径组件
+    const components: CFIPathComponent[] = [];
+    
+    // 解析全局路径（章节路径）
+    if (globalPathParts.length > 0) {
+      for (let i = 0; i < globalPathParts.length; i++) {
+        const part = globalPathParts[i];
+        if (part === '') continue;
+        
+        // 移除方括号内容（如 /2:4 的 :4）
+        const cleanPart = part.replace(/\[.*?\]/g, '');
+        
+        // 解析索引和类型
+        const index = parseInt(cleanPart);
+        if (isNaN(index)) continue;
+        
+        // 确定路径组件类型
+        let type: 'element' | 'text' | 'character' = 'element';
+        
+        // 如果路径中有偶数个斜杠，通常是文本节点
+        if (part.includes('/')) {
+          const pathDepth = part.split('/').length - 1;
+          if (pathDepth % 2 === 1) {
+            type = 'text';
+          }
+        }
+        
+        components.push({
+          type,
+          index,
+          assertion: this.extractAssertion(part),
+          parameter: this.extractParameter(part)
+        });
+      }
+    }
+    
+    // 解析本地路径（章节内位置）
+    const cleanLocalPath = localPath || '';
+    
+    // 解析scheme和term（如果存在）
+    let scheme: string | undefined;
+    let term: string | undefined;
+    if (cleanLocalPath.includes('?')) {
+      const [path, query] = cleanLocalPath.split('?');
+      const pairs = query.split('&');
+      for (const pair of pairs) {
+        const [key, value] = pair.split('=');
+        if (key === 'scheme') scheme = value;
+        if (key === 'term') term = value;
+      }
+    }
+    
+    return {
+      path: cfi,
+      components,
+      localPath: cleanLocalPath,
+      scheme,
+      term
+    };
+  }
+  
+  private static extractAssertion(part: string): string | undefined {
+    const match = part.match(/\[(.*?)\]/);
+    return match ? match[1] : undefined;
+  }
+  
+  private static extractParameter(part: string): Record<string, string> {
+    const params: Record<string, string> = {};
+    const match = part.match(/\[s\^([^=]*?)\^(.*?)\]/);
+    if (match) {
+      params[match[1]] = match[2];
+    }
+    return params;
+  }
+  
+  static generate(positions: Array<{
+    type: 'element' | 'text' | 'character';
+    index: number;
+    assertion?: string;
+  }>, localPath?: string): string {
+    const pathParts = positions.map(pos => {
+      let part = `${pos.index}`;
+      if (pos.assertion) {
+        part = `${part}[${pos.assertion}]`;
+      }
+      return part;
+    });
+    
+    const globalPath = `/${pathParts.join('/')}`;
+    const fullCFI = `epub(${globalPath}${localPath ? '!' + localPath : ''})`;
+    
+    return fullCFI;
+  }
+}
+
+// CFI高亮管理器
+class CFIHighlighter {
+  private static highlights: Map<string, HTMLElement> = new Map();
+  
+  static highlight(targetElement: Element, cfi: string, duration: number = 2000): void {
+    // 移除之前的高亮
+    this.clearHighlights();
+    
+    // 创建高亮元素
+    const highlight = document.createElement('div');
+    highlight.style.cssText = `
+      position: absolute;
+      background: rgba(255, 235, 59, 0.3);
+      border: 2px solid #fbbf24;
+      border-radius: 2px;
+      pointer-events: none;
+      z-index: 1000;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(251, 191, 36, 0.3);
+    `;
+    
+    // 获取元素位置
+    const rect = targetElement.getBoundingClientRect();
+    const containerRect = targetElement.parentElement?.getBoundingClientRect();
+    
+    if (containerRect) {
+      highlight.style.top = `${rect.top - containerRect.top}px`;
+      highlight.style.left = `${rect.left - containerRect.left}px`;
+      highlight.style.width = `${rect.width}px`;
+      highlight.style.height = `${rect.height}px`;
+    }
+    
+    // 添加高亮到容器
+    targetElement.parentElement?.appendChild(highlight);
+    this.highlights.set(cfi, highlight);
+    
+    // 自动移除高亮
+    setTimeout(() => {
+      this.removeHighlight(cfi);
+    }, duration);
+  }
+  
+  static removeHighlight(cfi: string): void {
+    const highlight = this.highlights.get(cfi);
+    if (highlight && highlight.parentNode) {
+      highlight.parentNode.removeChild(highlight);
+      this.highlights.delete(cfi);
+    }
+  }
+  
+  static clearHighlights(): void {
+    this.highlights.forEach(highlight => {
+      if (highlight.parentNode) {
+        highlight.parentNode.removeChild(highlight);
+      }
+    });
+    this.highlights.clear();
   }
 }
 
@@ -1513,6 +1682,416 @@ export class EpubReader {
       return chapters[this.currentChapterIndex];
     }
     return null;
+  }
+
+  // ===== CFI 相关方法 =====
+
+  /**
+   * 通过CFI跳转到指定位置
+   * @param cfi CFI字符串
+   * @param options 跳转选项
+   */
+  async jumpToCFI(
+    cfi: string, 
+    options: CFIJumpOptions = {}
+  ): Promise<void> {
+    const {
+      showLoading = true,
+      className = 'epub-chapter-content',
+      onError,
+      onSuccess,
+      scrollBehavior = 'smooth',
+      highlightTarget = true,
+      highlightDuration = 3000
+    } = options;
+
+    try {
+      // 解析CFI
+      const parsedCFI = CFIParser.parse(cfi);
+      console.log('解析CFI:', parsedCFI);
+
+      // 确定目标章节
+      const targetChapter = this.resolveChapterFromCFI(parsedCFI);
+      
+      // 如果需要切换章节
+      if (targetChapter.index !== this.currentChapterIndex) {
+        await this.renderChapter(targetChapter.index, undefined, {
+          showLoading,
+          className,
+          onError,
+          onSuccess: () => {
+            // 章节加载完成后，跳转到CFI位置
+            this.jumpToCFIInCurrentChapter(cfi, {
+              scrollBehavior,
+              highlightTarget,
+              highlightDuration
+            });
+            onSuccess?.();
+          }
+        });
+      } else {
+        // 同章节内跳转
+        await this.jumpToCFIInCurrentChapter(cfi, {
+          scrollBehavior,
+          highlightTarget,
+          highlightDuration
+        });
+        onSuccess?.();
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error : new Error(String(error));
+      onError?.(errorMsg);
+      throw errorMsg;
+    }
+  }
+
+  /**
+   * 在当前章节内跳转到CFI位置
+   */
+  private async jumpToCFIInCurrentChapter(
+    cfi: string, 
+    options: {
+      scrollBehavior?: ScrollBehavior;
+      highlightTarget?: boolean;
+      highlightDuration?: number;
+    }
+  ): Promise<void> {
+    const targetElement = document.getElementById(this.targetElementId);
+    if (!targetElement) {
+      throw new Error('目标DOM元素不存在');
+    }
+
+    try {
+      // 解析CFI并找到目标元素
+      const parsedCFI = CFIParser.parse(cfi);
+      const targetDOMElement = this.findElementByCFI(parsedCFI, targetElement);
+      
+      if (targetDOMElement) {
+        // 高亮目标
+        if (options.highlightTarget) {
+          CFIHighlighter.highlight(targetDOMElement, cfi, options.highlightDuration);
+        }
+        
+        // 滚动到目标位置
+        const behavior = options.scrollBehavior || 'smooth';
+        targetDOMElement.scrollIntoView(behavior === 'smooth');
+        
+        console.log('成功跳转到CFI位置:', cfi);
+      } else {
+        throw new Error('无法找到CFI对应的DOM元素');
+      }
+    } catch (error) {
+      throw new Error(`CFI跳转失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 根据CFI解析目标章节
+   */
+  private resolveChapterFromCFI(parsedCFI: CFI): { index: number; href: string } {
+    const chapters = this.getChapters();
+    
+    // 如果CFI包含章节信息
+    if (parsedCFI.chapterHref) {
+      const chapterIndex = chapters.findIndex(ch => ch.href === parsedCFI.chapterHref);
+      if (chapterIndex !== -1) {
+        return { index: chapterIndex, href: parsedCFI.chapterHref };
+      }
+    }
+    
+    if (parsedCFI.chapterId) {
+      const chapterIndex = chapters.findIndex(ch => ch.id === parsedCFI.chapterId);
+      if (chapterIndex !== -1) {
+        return { index: chapterIndex, href: chapters[chapterIndex].href };
+      }
+    }
+    
+    // 根据路径组件解析章节索引
+    // 通常第一个路径组件是章节索引
+    if (parsedCFI.components.length > 0) {
+      const firstComponent = parsedCFI.components[0];
+      if (firstComponent.index < chapters.length) {
+        return { 
+          index: firstComponent.index, 
+          href: chapters[firstComponent.index].href 
+        };
+      }
+    }
+    
+    // 默认返回当前章节
+    return { 
+      index: this.currentChapterIndex, 
+      href: chapters[this.currentChapterIndex]?.href || '' 
+    };
+  }
+
+  /**
+   * 根据CFI找到对应的DOM元素
+   */
+  private findElementByCFI(parsedCFI: CFI, container: Element): Element | null {
+    try {
+      let currentElement = container;
+      
+      // 遍历路径组件
+      for (let i = 1; i < parsedCFI.components.length; i++) {
+        const component = parsedCFI.components[i];
+        
+        if (component.type === 'element') {
+          // 找到子元素
+          const children = Array.from(currentElement.children);
+          if (component.index < children.length) {
+            currentElement = children[component.index];
+          } else {
+            return null;
+          }
+        } else if (component.type === 'text') {
+          // 找到文本节点
+          const walker = document.createTreeWalker(
+            currentElement,
+            NodeFilter.SHOW_TEXT,
+            null
+          );
+          
+          let textIndex = 0;
+          let textNode: Text | null = null;
+          
+          while (textNode = walker.nextNode() as Text) {
+            if (textIndex === component.index) {
+              return textNode.parentElement || currentElement;
+            }
+            textIndex++;
+          }
+        }
+      }
+      
+      // 处理本地路径（如果有）
+      if (parsedCFI.localPath) {
+        return this.findElementByLocalPath(parsedCFI.localPath, currentElement);
+      }
+      
+      return currentElement;
+    } catch (error) {
+      console.error('根据CFI查找DOM元素失败:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 根据本地路径查找元素
+   */
+  private findElementByLocalPath(localPath: string, container: Element): Element | null {
+    try {
+      // 移除查询参数
+      const cleanPath = localPath.split('?')[0];
+      
+      // 尝试作为ID选择器
+      if (cleanPath.startsWith('#')) {
+        const element = container.querySelector(cleanPath);
+        return element as Element;
+      }
+      
+      // 尝试作为XPath
+      if (cleanPath.startsWith('/') || cleanPath.startsWith('(')) {
+        const result = document.evaluate(
+          cleanPath,
+          container,
+          null,
+          XPathResult.FIRST_ORDERED_NODE_TYPE,
+          null
+        );
+        return result.singleNodeValue as Element;
+      }
+      
+      // 尝试作为CSS选择器
+      const element = container.querySelector(cleanPath);
+      return element as Element;
+    } catch (error) {
+      console.error('解析本地路径失败:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 生成当前光标位置的CFI
+   * @param selection 可选的选区对象
+   */
+  generateCFI(selection?: Selection): CFI | null {
+    try {
+      const container = document.getElementById(this.targetElementId);
+      if (!container) {
+        throw new Error('目标容器不存在');
+      }
+
+      // 如果提供了选区，使用选区
+      const target = selection ? 
+        (selection.rangeCount > 0 ? selection.getRangeAt(0).startContainer : null) : 
+        null;
+
+      // 获取当前焦点元素
+      const targetElement = target ? 
+        (target.nodeType === Node.TEXT_NODE ? target.parentElement : target as Element) :
+        document.activeElement as Element;
+
+      if (!targetElement || !container.contains(targetElement)) {
+        throw new Error('无法确定CFI目标位置');
+      }
+
+      // 构建路径组件
+      const pathComponents: CFIPathComponent[] = [];
+      let currentElement: Element | null = targetElement;
+      
+      // 添加章节路径组件（当前章节索引）
+      pathComponents.push({
+        type: 'element',
+        index: this.currentChapterIndex
+      });
+
+      // 计算元素路径
+      while (currentElement && currentElement !== container) {
+        const parentEl: Element | null = currentElement.parentElement;
+        if (!parentEl) break;
+
+        const siblings = Array.from(parentEl.children);
+        const index = siblings.indexOf(currentElement);
+
+        pathComponents.push({
+          type: 'element',
+          index: index
+        });
+
+        currentElement = parentEl;
+      }
+
+      // 反转路径（从根到目标）
+      pathComponents.reverse();
+
+      // 生成本地路径
+      let localPath = '';
+      if (target && target.nodeType === Node.TEXT_NODE) {
+        const textElement = target.parentElement;
+        if (textElement) {
+          const id = textElement.id;
+          if (id) {
+            localPath = `#${id}`;
+          }
+        }
+      }
+
+      return {
+        path: CFIParser.generate(pathComponents, localPath),
+        components: pathComponents,
+        localPath,
+        chapterHref: this.getCurrentChapter()?.href,
+        chapterId: this.getCurrentChapter()?.id
+      };
+    } catch (error) {
+      console.error('生成CFI失败:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 获取指定元素的CFI
+   * @param element 目标元素
+   * @param includeChapter 是否包含章节信息
+   */
+  getElementCFI(element: Element, includeChapter: boolean = true): CFI | null {
+    try {
+      const container = document.getElementById(this.targetElementId);
+      if (!container) {
+        throw new Error('目标容器不存在');
+      }
+
+      if (!container.contains(element)) {
+        throw new Error('目标元素不在容器内');
+      }
+
+      // 构建路径组件
+      const pathComponents: CFIPathComponent[] = [];
+      let currentElement: Element | null = element;
+      
+      // 添加章节路径
+      if (includeChapter) {
+        pathComponents.push({
+          type: 'element',
+          index: this.currentChapterIndex
+        });
+      }
+
+      // 计算元素路径
+      while (currentElement && currentElement !== container) {
+        const parentEl: Element | null = currentElement.parentElement;
+        if (!parentEl) break;
+
+        const siblings = Array.from(parentEl.children);
+        const index = siblings.indexOf(currentElement);
+
+        pathComponents.push({
+          type: 'element',
+          index: index
+        });
+
+        currentElement = parentEl;
+      }
+
+      // 反转路径
+      pathComponents.reverse();
+
+      // 生成本地路径
+      let localPath = '';
+      if (element.id) {
+        localPath = `#${element.id}`;
+      }
+
+      return {
+        path: CFIParser.generate(pathComponents, localPath),
+        components: pathComponents,
+        localPath,
+        chapterHref: includeChapter ? this.getCurrentChapter()?.href : undefined,
+        chapterId: includeChapter ? this.getCurrentChapter()?.id : undefined
+      };
+    } catch (error) {
+      console.error('获取元素CFI失败:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 获取当前光标位置的详细信息
+   */
+  getCurrentCFICursor(): CFICursorPosition | null {
+    try {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) {
+        return null;
+      }
+
+      const range = selection.getRangeAt(0);
+      const cfi = this.generateCFI(selection);
+
+      if (!cfi) {
+        return null;
+      }
+
+      // 获取文本上下文
+      const textNode = range.startContainer as Text;
+      const offset = range.startOffset;
+      const fullText = textNode.textContent || '';
+      
+      const textBefore = fullText.substring(0, offset);
+      const textAfter = fullText.substring(offset);
+
+      return {
+        cfi,
+        textBefore: textBefore.slice(-50), // 前50个字符
+        textAfter: textAfter.slice(0, 50),  // 后50个字符
+        textNode,
+        offset
+      };
+    } catch (error) {
+      console.error('获取当前CFI光标失败:', error);
+      return null;
+    }
   }
 
   /**

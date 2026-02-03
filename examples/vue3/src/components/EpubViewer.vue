@@ -112,12 +112,66 @@ const updateNavigationState = () => {
   hasNextChapter.value = props.reader.hasNextChapter();
 };
 
+// CFI相关方法
+const jumpToCFI = async (cfi: string) => {
+  try {
+    await props.reader.jumpToCFI(cfi, {
+      showLoading: true,
+      highlightTarget: true,
+      highlightDuration: 3000,
+      scrollBehavior: 'smooth',
+      onError: (error) => {
+        console.error('CFI跳转失败:', error);
+      },
+      onSuccess: () => {
+        console.log('CFI跳转成功:', cfi);
+      }
+    });
+  } catch (error) {
+    console.error('CFI跳转异常:', error);
+  }
+};
+
+const getCurrentCFI = () => {
+  try {
+    const cfi = props.reader.generateCFI();
+    console.log('当前CFI:', cfi);
+    return cfi;
+  } catch (error) {
+    console.error('生成CFI失败:', error);
+    return null;
+  }
+};
+
+const getCurrentCFICursor = () => {
+  try {
+    const cursor = props.reader.getCurrentCFICursor();
+    console.log('当前CFI光标:', cursor);
+    return cursor;
+  } catch (error) {
+    console.error('获取CFI光标失败:', error);
+    return null;
+  }
+};
+
 // 确保DOM元素存在并清理样式
 onUnmounted(() => {
   const styleElement = document.getElementById('epub-chapter-styles');
   if (styleElement) {
     document.head.removeChild(styleElement);
   }
+});
+
+// 暴露CFI方法给父组件
+defineExpose({
+  setCurrentChapter: (index: number) => {
+    if (index >= 0 && index < chapters.value.length) {
+      currentChapterIndex.value = index;
+    }
+  },
+  jumpToCFI,
+  getCurrentCFI,
+  getCurrentCFICursor
 });
 
 

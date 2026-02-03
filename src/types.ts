@@ -49,3 +49,39 @@ export interface EpubReaderOptions {
   loadCover?: boolean;
   targetElementId?: string;
 }
+
+// CFI相关类型定义
+export interface CFIPathComponent {
+  type: 'element' | 'text' | 'character';
+  index: number;
+  assertion?: string;
+  parameter?: Record<string, string>;
+}
+
+export interface CFI {
+  path: string;
+  chapterHref?: string;
+  chapterId?: string;
+  components: CFIPathComponent[];
+  localPath: string; // 章节内路径
+  scheme?: string;
+  term?: string;
+}
+
+export interface CFIJumpOptions {
+  showLoading?: boolean;
+  className?: string;
+  onError?: (error: Error) => void;
+  onSuccess?: () => void;
+  scrollBehavior?: ScrollBehavior;
+  highlightTarget?: boolean;
+  highlightDuration?: number;
+}
+
+export interface CFICursorPosition {
+  cfi: CFI;
+  textBefore: string;
+  textAfter: string;
+  textNode?: Text;
+  offset?: number;
+}
