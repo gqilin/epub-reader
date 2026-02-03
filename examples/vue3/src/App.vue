@@ -26,6 +26,8 @@ const reader = ref<EpubReader | null>(null);
 
 const onEpubLoaded = (epubReader: EpubReader) => {
   reader.value = epubReader;
+  console.log('Epub loaded', epubReader);
+  
 };
 </script>
 

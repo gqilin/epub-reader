@@ -21,14 +21,10 @@ class XMLParser {
     }
 
     this.initializePromise = (async () => {
-      console.log('🔍 检查XML解析器环境...');
-      
       // 检查是否在浏览器环境
       const isBrowser = typeof window !== 'undefined';
-      console.log('环境类型:', isBrowser ? '浏览器' : 'Node.js');
 
       if (isBrowser) {
-        console.log('检测到浏览器环境，跳过xml2js（不兼容）');
         this.isXML2JSAvailable = false;
         return;
       }
@@ -36,10 +32,8 @@ class XMLParser {
       try {
         // 尝试动态导入xml2js（仅限Node.js环境）
         const xml2js = await import('xml2js');
-        console.log('✅ xml2js库加载成功');
         this.isXML2JSAvailable = true;
       } catch (error) {
-        console.warn('⚠️ xml2js库不可用:', error);
         this.isXML2JSAvailable = false;
       }
     })();
@@ -60,7 +54,6 @@ class XMLParser {
           });
         });
       } catch (error) {
-        console.warn('xml2js解析失败，尝试备用方案:', error);
         // 如果xml2js失败，尝试使用浏览器原生解析器
         return this.parseWithDOMParser(xml);
       }
@@ -72,8 +65,6 @@ class XMLParser {
 
   private static parseWithDOMParser(xml: string): Promise<any> {
     return new Promise((resolve, reject) => {
-      console.log('📄 使用浏览器原生DOM解析器');
-      
       if (typeof DOMParser === 'undefined') {
         reject(new Error('当前环境不支持XML解析，请升级浏览器或使用Node.js环境'));
         return;
@@ -92,7 +83,6 @@ class XMLParser {
         const result = this.xmlElementToObject(xmlDoc.documentElement);
         resolve(result);
       } catch (error) {
-        console.error('DOM解析器失败:', error);
         reject(error);
       }
     });
@@ -160,33 +150,19 @@ export class EpubReader {
   }
 
   async load(epubData: ArrayBuffer | Uint8Array | Blob): Promise<void> {
-    console.group('📚 EpubReader.load() 开始加载EPUB');
-    
     try {
-      // 启用JSZip调试模式
-      JSZipWrapper.enableDebug(true);
-      
       if (epubData instanceof Blob) {
-        console.log('检测到Blob数据:', {
-          size: epubData.size,
-          type: epubData.type
-        });
         epubData = await epubData.arrayBuffer();
-        console.log('Blob转换为ArrayBuffer完成，大小:', epubData.byteLength);
       }
 
       // 确保我们有正确的Uint8Array格式用于JSZip
       let data: Uint8Array;
       if (epubData instanceof ArrayBuffer) {
         data = new Uint8Array(epubData);
-        console.log('ArrayBuffer转换为Uint8Array，长度:', data.length);
       } else if (epubData instanceof Uint8Array) {
         data = epubData;
-        console.log('直接使用Uint8Array，长度:', data.length);
       } else {
-        const error = new Error(`EPUB数据类型无效: ${typeof epubData}`);
-        console.error('数据类型错误:', typeof epubData, epubData);
-        throw error;
+        throw new Error(`EPUB数据类型无效: ${typeof epubData}`);
       }
 
       // 检查数据完整性
@@ -194,21 +170,11 @@ export class EpubReader {
         throw new Error('EPUB数据为空');
       }
 
-      console.log('开始使用JSZip包装器加载...');
-      
       // 使用JSZip包装器加载
       this.zip = await JSZipWrapper.loadAsync(data);
-      
-      console.log('JSZip加载成功，开始解析EPUB结构...');
-      
       await this.parseEpub();
       
-      console.log('EPUB解析完成');
-      console.groupEnd();
     } catch (error) {
-      console.error('EPUB加载过程中发生错误:', error);
-      console.groupEnd();
-      
       // 处理JSZip兼容性问题
       if (error instanceof Error) {
         const errorMsg = error.message.toLowerCase();
@@ -266,84 +232,50 @@ export class EpubReader {
   private async parseEpub(): Promise<void> {
     if (!this.zip) throw new Error('EPUB not loaded');
 
-    console.group('🗂️ 解析EPUB结构');
+    // 解析container.xml
+    const containerXml = await this.getFileContent('META-INF/container.xml');
+    const container = await this.parseXml(containerXml);
     
-    try {
-      // 解析container.xml
-      console.log('📦 解析container.xml...');
-      const containerXml = await this.getFileContent('META-INF/container.xml');
-      console.log('container.xml内容:', containerXml.substring(0, 200));
-      
-      const container = await this.parseXml(containerXml);
-      console.log('解析后的container结构:', container);
-      
-      console.log('🔍 检查解析结果结构:', Object.keys(container));
-      console.log('📋 container对象详情:', container);
-      
-      // 安全地获取rootfile路径
-      // DOMParser直接返回根元素作为对象，xml2js会包装一层
-      const containerElement = container.container || container;
-      
-      if (!containerElement) {
-        throw new Error('container.xml格式错误：缺少container元素');
-      }
-      
-      console.log('📦 container元素:', containerElement);
-      
-      if (!containerElement.rootfiles) {
-        throw new Error('container.xml格式错误：缺少rootfiles元素');
-      }
-      
-      const rootfiles = Array.isArray(containerElement.rootfiles) 
-        ? containerElement.rootfiles 
-        : [containerElement.rootfiles];
-      
-      if (!rootfiles[0] || !rootfiles[0].rootfile) {
-        throw new Error('container.xml格式错误：缺少rootfile元素');
-      }
-      
-      const firstRootfile = rootfiles[0].rootfile || rootfiles[0];
-      const rootfilesArray = Array.isArray(firstRootfile) 
-        ? firstRootfile 
-        : [firstRootfile];
-      
-      console.log('📄 rootfiles数组:', rootfilesArray);
-      
-      if (!rootfilesArray[0] || !rootfilesArray[0].$ || !rootfilesArray[0].$['full-path']) {
-        throw new Error('container.xml格式错误：rootfile缺少full-path属性');
-      }
-      
-      const rootfilePath = rootfilesArray[0].$['full-path'];
-      console.log('📄 根文件路径:', rootfilePath);
-      
-      // 解析OPF文件
-      console.log('📋 解析OPF文件:', rootfilePath);
-      const opfContent = await this.getFileContent(rootfilePath);
-      console.log('OPF内容前200字符:', opfContent.substring(0, 200));
-      
-      const opf = await this.parseXml(opfContent);
-      console.log('解析后的OPF结构:', opf);
-
-      this.info = await this.parseOpf(opf, rootfilePath);
-      console.log('✅ EPUB结构解析完成');
-      
-    } catch (error) {
-      console.error('❌ EPUB结构解析失败:', error);
-      throw error;
-    } finally {
-      console.groupEnd();
+    // 安全地获取rootfile路径
+    const containerElement = container.container || container;
+    
+    if (!containerElement) {
+      throw new Error('container.xml格式错误：缺少container元素');
     }
+    
+    if (!containerElement.rootfiles) {
+      throw new Error('container.xml格式错误：缺少rootfiles元素');
+    }
+    
+    const rootfiles = Array.isArray(containerElement.rootfiles) 
+      ? containerElement.rootfiles 
+      : [containerElement.rootfiles];
+
+    if (!rootfiles[0] || !rootfiles[0].rootfile) {
+      throw new Error('container.xml格式错误：缺少rootfile元素');
+    }
+    
+    const firstRootfile = rootfiles[0].rootfile || rootfiles[0];
+    const rootfilesArray = Array.isArray(firstRootfile) 
+      ? firstRootfile 
+      : [firstRootfile];
+    
+    if (!rootfilesArray[0] || !rootfilesArray[0].$ || !rootfilesArray[0].$['full-path']) {
+      throw new Error('container.xml格式错误：rootfile缺少full-path属性');
+    }
+    
+    const rootfilePath = rootfilesArray[0].$['full-path'];
+    
+    // 解析OPF文件
+    const opfContent = await this.getFileContent(rootfilePath);
+    const opf = await this.parseXml(opfContent);
+
+    this.info = await this.parseOpf(opf, rootfilePath);
   }
 
   private async parseOpf(opf: any, rootfilePath: string): Promise<EpubInfo> {
-    console.group('📚 解析OPF文件');
-    console.log('OPF结构:', opf);
-    console.log('OPF根键:', Object.keys(opf));
-    
     // 兼容两种解析器的结构
     const packageElement = opf.package || opf;
-    console.log('Package元素:', packageElement);
-    console.log('Package根键:', Object.keys(packageElement || {}));
     
     if (!packageElement) {
       throw new Error('OPF文件格式错误：缺少package元素');
@@ -354,19 +286,12 @@ export class EpubReader {
     const manifestElement = this.getManifestElement(packageElement);
     const spineElement = this.getSpineElement(packageElement);
 
-    console.log('📋 元数据元素:', metadataElement);
-    console.log('📦 清单元素:', manifestElement);
-    console.log('📖 书脊元素:', spineElement);
-
     const metadata = this.parseMetadata(metadataElement);
     const manifest = this.parseManifest(manifestElement);
     const spine = this.parseSpine(spineElement);
     
     const toc = await this.parseTableOfContents(manifest, spine);
     const chapters = this.parseChapters(manifest, spine, rootfilePath);
-
-    console.log('✅ OPF解析完成');
-    console.groupEnd();
 
     return {
       metadata,
@@ -388,31 +313,22 @@ export class EpubReader {
     
     for (const metadata of possibilities) {
       if (metadata) {
-        console.log('✅ 找到元数据元素:', Object.keys(metadata));
         return metadata;
       }
     }
     
-    console.warn('⚠️ 未找到元数据元素');
     return {};
   }
 
   private getManifestElement(packageElement: any): any {
-    const manifest = packageElement.manifest?.[0] || packageElement.manifest;
-    console.log('🔍 Manifest搜索结果:', manifest);
-    return manifest || {};
+    return packageElement.manifest?.[0] || packageElement.manifest || {};
   }
 
   private getSpineElement(packageElement: any): any {
-    const spine = packageElement.spine?.[0] || packageElement.spine;
-    console.log('🦴 Spine搜索结果:', spine);
-    return spine || {};
+    return packageElement.spine?.[0] || packageElement.spine || {};
   }
 
   private parseMetadata(metadataElement: any): EpubMetadata {
-    console.group('📋 解析元数据');
-    console.log('元数据元素:', metadataElement);
-    
     const metadata: EpubMetadata = {};
 
     if (metadataElement) {
@@ -427,13 +343,10 @@ export class EpubReader {
         
         for (const field of possibilities) {
           if (field) {
-            const value = field._ || field;
-            console.log(`✅ 找到${fieldName}:`, value);
-            return value;
+            return field._ || field;
           }
         }
         
-        console.log(`⚠️ 未找到${fieldName}`);
         return null;
       };
 
@@ -456,22 +369,14 @@ export class EpubReader {
       );
       if (metaCover) {
         metadata.cover = metaCover.$.content;
-        console.log('✅ 找到封面:', metadata.cover);
       }
     }
 
-    console.log('解析结果:', metadata);
-    console.groupEnd();
     return metadata;
   }
 
   private parseManifest(manifestElement: any): EpubManifest[] {
-    console.group('📦 解析清单');
-    console.log('Manifest元素:', manifestElement);
-    
     if (!manifestElement?.item) {
-      console.warn('⚠️ 未找到item元素');
-      console.groupEnd();
       return [];
     }
 
@@ -479,30 +384,17 @@ export class EpubReader {
       ? manifestElement.item 
       : [manifestElement.item];
     
-    console.log('Items数组:', items);
+    const manifest = items.map((item: any, index: number) => ({
+      id: item.$?.id || `item-${index}`,
+      href: item.$?.href || '',
+      mediaType: item.$?.['media-type'] || '',
+    }));
     
-    const manifest = items.map((item: any, index: number) => {
-      const manifestItem = {
-        id: item.$?.id || `item-${index}`,
-        href: item.$?.href || '',
-        mediaType: item.$?.['media-type'] || '',
-      };
-      console.log(`📄 Item ${index}:`, manifestItem);
-      return manifestItem;
-    });
-    
-    console.log('✅ 清单解析完成:', manifest);
-    console.groupEnd();
     return manifest;
   }
 
   private parseSpine(spineElement: any): EpubSpine[] {
-    console.group('🦴 解析书脊');
-    console.log('Spine元素:', spineElement);
-    
     if (!spineElement?.itemref) {
-      console.warn('⚠️ 未找到itemref元素');
-      console.groupEnd();
       return [];
     }
 
@@ -510,19 +402,11 @@ export class EpubReader {
       ? spineElement.itemref 
       : [spineElement.itemref];
     
-    console.log('Itemrefs数组:', itemrefs);
+    const spine = itemrefs.map((itemref: any, index: number) => ({
+      idref: itemref.$?.idref || `itemref-${index}`,
+      linear: itemref.$?.linear || 'yes',
+    }));
     
-    const spine = itemrefs.map((itemref: any, index: number) => {
-      const spineItem = {
-        idref: itemref.$?.idref || `itemref-${index}`,
-        linear: itemref.$?.linear || 'yes',
-      };
-      console.log(`📖 Itemref ${index}:`, spineItem);
-      return spineItem;
-    });
-    
-    console.log('✅ 书脊解析完成:', spine);
-    console.groupEnd();
     return spine;
   }
 
@@ -530,36 +414,132 @@ export class EpubReader {
     manifest: EpubManifest[],
     spine: EpubSpine[]
   ): Promise<EpubTableOfContents[]> {
+    // 方法1: 尝试NCX文件 (传统的EPUB 2.0格式)
     const ncxItem = manifest.find(item => item.mediaType === 'application/x-dtbncx+xml');
-    if (!ncxItem) return [];
-
-    try {
-      const ncxContent = await this.getFileContent(ncxItem.href);
-      const ncx = await this.parseXml(ncxContent);
-      const navMap = ncx.ncx?.navMap?.[0];
-
-      if (navMap?.navPoint) {
-        return this.parseNavPoints(navMap.navPoint, 0);
+    
+    if (ncxItem) {
+      try {
+        const ncxContent = await this.getFileContent(ncxItem.href);
+        
+        const ncx = await this.parseXml(ncxContent);
+        
+        // 兼容两种解析器的结构
+        const ncxElement = ncx.ncx || ncx;
+        
+        const navMap = ncxElement?.navMap?.[0] || ncxElement?.navMap;
+        
+        if (navMap?.navPoint) {
+          const navPoints = Array.isArray(navMap.navPoint) ? navMap.navPoint : [navMap.navPoint];
+          const toc = this.parseNavPoints(navPoints, 0);
+          return toc;
+        }
+      } catch (error) {
+        // NCX解析失败，继续尝试其他方法
       }
-    } catch (error) {
-      console.warn('Failed to parse NCX table of contents:', error);
     }
-
-    return [];
+    
+    // 方法2: 尝试导航文档 (EPUB 3.0格式)
+    const navItems = manifest.filter(item => 
+      item.mediaType === 'application/xhtml+xml' && 
+      (item.href.includes('nav') || item.href.includes('toc'))
+    );
+    
+    for (const navItem of navItems) {
+      try {
+        const navContent = await this.getFileContent(navItem.href);
+        
+        // 查找<nav>标签
+        const navMatch = navContent.match(/<nav[^>]*>([\s\S]*?)<\/nav>/gi);
+        if (navMatch) {
+          for (let i = 0; i < navMatch.length; i++) {
+            const navElement = navMatch[i];
+            
+            // 解析nav中的链接
+            const toc = await this.parseNavFromHtml(navElement, navItem.href);
+            if (toc.length > 0) {
+              return toc;
+            }
+          }
+        }
+      } catch (error) {
+        // 导航文档解析失败，继续尝试其他方法
+      }
+    }
+    
+    // 方法3: 从章节生成基础目录
+    const basicToc = spine.map((spineItem, index) => {
+      const manifestItem = manifest.find(item => item.id === spineItem.idref);
+      const href = manifestItem ? manifestItem.href : '';
+      const fileName = href.split('/').pop() || '';
+      
+      return {
+        id: spineItem.idref,
+        href: href,
+        title: `Chapter ${index + 1}${fileName ? ` - ${fileName}` : ''}`,
+        order: index,
+        children: []
+      };
+    });
+    
+    return basicToc;
   }
 
-  private parseNavPoints(navPoints: any[], startOrder: number): EpubTableOfContents[] {
-    return navPoints.map((navPoint, index) => {
-      const label = navPoint.navLabel?.[0]?.text?.[0];
-      const src = navPoint.content?.[0]?.$?.src;
+  private async parseNavFromHtml(navHtml: string, navHref: string): Promise<EpubTableOfContents[]> {
+    // 获取nav文件的基础路径
+    const basePath = navHref.substring(0, navHref.lastIndexOf('/') + 1);
+    
+    // 解析HTML中的链接
+    const linkRegex = /<a[^>]+href\s*=\s*['"]([^'"]+)['"][^>]*>([^<]+)<\/a>/gi;
+    const toc: EpubTableOfContents[] = [];
+    let match;
+    let order = 0;
+    
+    while ((match = linkRegex.exec(navHtml)) !== null) {
+      const [fullMatch, href, text] = match;
+      const title = text.trim();
+      
+      if (title) {
+        toc.push({
+          id: `nav-${order}`,
+          href: basePath + href,
+          title: title,
+          order: order++,
+          children: []
+        });
+      }
+    }
+    
+    return toc;
+  }
+
+  private parseNavPoints(navPoints: any, startOrder: number): EpubTableOfContents[] {
+    // 确保navPoints是数组
+    const points = Array.isArray(navPoints) ? navPoints : [navPoints];
+    
+    return points.map((navPoint, index) => {
+      // 兼容不同的XML解析器结构
+      const label = navPoint.navLabel?.[0]?.text?.[0] || 
+                   navPoint.navLabel?.text?.[0] ||
+                   navPoint.navLabel?.[0]?.text ||
+                   navPoint.navLabel?.text ||
+                   navPoint.text ||
+                   '';
+      
+      const src = navPoint.content?.[0]?.$?.src || 
+                 navPoint.content?.$?.src ||
+                 navPoint.src ||
+                 '';
+      
+      const id = navPoint.$.id || navPoint.id || `navPoint-${startOrder + index}`;
       
       const toc: EpubTableOfContents = {
-        id: navPoint.$.id,
+        id: id,
         href: src || '',
-        title: label || '',
+        title: String(label || `Chapter ${startOrder + index + 1}`),
         order: startOrder + index,
       };
 
+      // 处理子导航点
       if (navPoint.navPoint) {
         toc.children = this.parseNavPoints(navPoint.navPoint, 0);
       }
@@ -596,19 +576,10 @@ export class EpubReader {
   }
 
   private async parseXml(xml: string): Promise<any> {
-    console.group('📄 XML解析开始');
-    console.log('XML长度:', xml.length);
-    console.log('XML前100字符:', xml.substring(0, 100));
-    
     try {
       const result = await XMLParser.parseString(xml);
-      console.log('✅ XML解析成功');
-      console.groupEnd();
       return result;
     } catch (error) {
-      console.error('❌ XML解析失败:', error);
-      console.log('原始XML内容:', xml.substring(0, 500));
-      console.groupEnd();
       throw new Error(`XML解析失败: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -633,16 +604,10 @@ export class EpubReader {
     if (!this.zip) throw new Error('EPUB not loaded');
 
     try {
-      console.group('📄 加载章节内容');
-      console.log('章节路径:', chapterHref);
-      
       const content = await this.getFileContent(chapterHref);
-      console.log('原始内容长度:', content.length);
       
       // 处理资源引用（图片、CSS等）
       const processedContent = await this.processContentResources(content, chapterHref);
-      console.log('处理后内容长度:', processedContent.length);
-      console.groupEnd();
       
       return processedContent;
     } catch (error) {
@@ -652,11 +617,8 @@ export class EpubReader {
   }
 
   private async processContentResources(htmlContent: string, chapterHref: string): Promise<string> {
-    console.group('🖼️ 处理资源引用');
-    
     // 获取章节的基础路径
     const chapterPath = chapterHref.substring(0, chapterHref.lastIndexOf('/') + 1);
-    console.log('章节基础路径:', chapterPath);
     
     // 处理图片标签
     let processedContent = htmlContent;
@@ -669,17 +631,14 @@ export class EpubReader {
     
     while ((match = imgRegex.exec(htmlContent)) !== null) {
       const [fullMatch, beforeSrc, src, afterSrc] = match;
-      console.log('🖼️ 发现图片:', src);
       
       // 跳过已经是data URL或完整URL的图片
       if (src.startsWith('data:') || src.startsWith('http')) {
-        console.log('⏭️ 跳过data URL或HTTP URL:', src);
         continue;
       }
       
       // 处理相对路径
       const fullImagePath = this.resolveResourcePath(src, chapterPath);
-      console.log('🔗 解析后路径:', fullImagePath);
       
       // 创建异步处理promise
       const promise = this.processImageResource(fullImagePath, src, beforeSrc, afterSrc)
@@ -689,7 +648,7 @@ export class EpubReader {
           }
         })
         .catch(error => {
-          console.warn('⚠️ 图片处理失败:', src, error);
+          // 图片处理失败，继续处理其他图片
         });
       
       imgPromises.push(promise);
@@ -697,14 +656,12 @@ export class EpubReader {
     
     // 等待所有图片处理完成
     if (imgPromises.length > 0) {
-      console.log(`⏳ 处理 ${imgPromises.length} 个图片资源...`);
       await Promise.all(imgPromises);
     }
     
     // 替换所有处理完成的图片标签
     for (const { original, replacement } of imgReplacements) {
       processedContent = processedContent.replace(original, replacement);
-      console.log('✅ 替换图片标签完成');
     }
     
     // 处理CSS链接
@@ -713,22 +670,15 @@ export class EpubReader {
     
     while ((match = cssRegex.exec(processedContent)) !== null) {
       const [fullMatch, beforeHref, href, afterHref] = match;
-      console.log('🎨 发现CSS:', href);
       
       if (href.startsWith('http')) {
-        console.log('⏭️ 跳过HTTP CSS:', href);
         continue;
       }
       
       const fullCssPath = this.resolveResourcePath(href, chapterPath);
-      console.log('🔗 CSS解析后路径:', fullCssPath);
       
       // 这里可以添加CSS处理逻辑，暂时跳过
-      console.log('⏭️ CSS处理暂时跳过');
     }
-    
-    console.log('✅ 资源处理完成');
-    console.groupEnd();
     
     return processedContent;
   }
@@ -753,13 +703,10 @@ export class EpubReader {
     afterSrc: string
   ): Promise<string | null> {
     try {
-      console.log('🖼️ 开始处理图片资源:', fullImagePath);
-      
       // 尝试从ZIP文件中获取图片
       const imageData = await this.getResource(fullImagePath);
       
       if (!imageData) {
-        console.warn('⚠️ 图片资源未找到:', fullImagePath);
         // 返回带错误标记的img标签
         return `<img${beforeSrc}src="data:image/svg+xml;base64,${btoa(`
           <svg width="200" height="100" xmlns="http://www.w3.org/2000/svg">
@@ -773,11 +720,9 @@ export class EpubReader {
       
       // 确定图片MIME类型
       const mimeType = this.getImageMimeType(fullImagePath);
-      console.log('📋 图片MIME类型:', mimeType);
       
       // 创建data URL
       const dataUrl = `data:${mimeType};base64,${imageData}`;
-      console.log('✅ 图片data URL创建成功');
       
       return `<img${beforeSrc}src="${dataUrl}"${afterSrc}>`;
       
@@ -821,71 +766,49 @@ export class EpubReader {
   async getCoverImage(): Promise<string | null> {
     if (!this.zip || !this.options.loadCover) return null;
 
-    console.group('🖼️ 查找封面图片');
-    
     try {
       const metadata = this.getMetadata();
       const manifest = this.info?.manifest || [];
       
-      console.log('📋 元数据:', metadata);
-      console.log('📦 清单中的资源:', manifest.map(item => ({ id: item.id, href: item.href, mediaType: item.mediaType })));
-      
       // 方法1: 通过meta标签的cover属性查找
       if (metadata?.cover) {
-        console.log('🎯 方法1: 通过meta cover属性查找:', metadata.cover);
         const coverItem = manifest.find(item => item.id === metadata.cover);
         
         if (coverItem && coverItem.mediaType.startsWith('image/')) {
-          console.log('✅ 找到封面项目:', coverItem);
           const coverUrl = await this.loadImageResource(coverItem.href);
           if (coverUrl) {
-            console.log('✅ 封面加载成功 (方法1)');
-            console.groupEnd();
             return coverUrl;
           }
         }
       }
       
       // 方法2: 查找id包含"cover"的资源
-      console.log('🎯 方法2: 查找包含cover的资源');
       const coverItems = manifest.filter(item => 
         item.id.toLowerCase().includes('cover') && 
         item.mediaType.startsWith('image/')
       );
       
-      console.log('找到的cover相关资源:', coverItems);
-      
       for (const coverItem of coverItems) {
-        console.log('尝试加载封面:', coverItem);
         const coverUrl = await this.loadImageResource(coverItem.href);
         if (coverUrl) {
-          console.log('✅ 封面加载成功 (方法2)');
-          console.groupEnd();
           return coverUrl;
         }
       }
       
       // 方法3: 查找href包含cover的图片文件
-      console.log('🎯 方法3: 查找href包含cover的图片');
       const coverByHref = manifest.filter(item => 
         item.href.toLowerCase().includes('cover') && 
         item.mediaType.startsWith('image/')
       );
       
-      console.log('找到的href包含cover的资源:', coverByHref);
-      
       for (const coverItem of coverByHref) {
-        console.log('尝试加载封面:', coverItem);
         const coverUrl = await this.loadImageResource(coverItem.href);
         if (coverUrl) {
-          console.log('✅ 封面加载成功 (方法3)');
-          console.groupEnd();
           return coverUrl;
         }
       }
       
       // 方法4: 查找常见的封面文件名
-      console.log('🎯 方法4: 查找常见封面文件名');
       const commonCoverNames = [
         'cover.jpg', 'cover.jpeg', 'cover.png', 'cover.gif',
         'Cover.jpg', 'Cover.jpeg', 'Cover.png', 'Cover.gif',
@@ -897,59 +820,44 @@ export class EpubReader {
       for (const coverName of commonCoverNames) {
         const coverItem = manifest.find(item => item.href === coverName);
         if (coverItem && coverItem.mediaType.startsWith('image/')) {
-          console.log('找到常见封面文件:', coverItem);
           const coverUrl = await this.loadImageResource(coverItem.href);
           if (coverUrl) {
-            console.log('✅ 封面加载成功 (方法4)');
-            console.groupEnd();
             return coverUrl;
           }
         }
       }
       
       // 方法5: 查找第一个图片文件（作为最后的备选）
-      console.log('🎯 方法5: 使用第一个图片文件作为封面');
       const firstImage = manifest.find(item => item.mediaType.startsWith('image/'));
       
       if (firstImage) {
-        console.log('使用第一个图片作为封面:', firstImage);
         const coverUrl = await this.loadImageResource(firstImage.href);
         if (coverUrl) {
-          console.log('✅ 封面加载成功 (方法5)');
-          console.groupEnd();
           return coverUrl;
         }
       }
       
-      console.warn('⚠️ 未找到任何封面图片');
-      console.groupEnd();
       return null;
       
     } catch (error) {
       console.error('❌ 封面加载失败:', error);
-      console.groupEnd();
       return null;
     }
   }
 
   private async loadImageResource(href: string): Promise<string | null> {
     try {
-      console.log('🖼️ 加载图片资源:', href);
-      
       // 获取图片数据
       const imageData = await this.getResource(href);
       if (!imageData) {
-        console.warn('⚠️ 图片数据未找到:', href);
         return null;
       }
       
       // 确定MIME类型
       const mimeType = this.getImageMimeType(href);
-      console.log('📋 图片MIME类型:', mimeType);
       
       // 创建Data URL
       const dataUrl = `data:${mimeType};base64,${imageData}`;
-      console.log('✅ 图片Data URL创建成功');
       
       return dataUrl;
       
@@ -963,12 +871,8 @@ export class EpubReader {
     if (!this.zip) return null;
 
     try {
-      console.log('🔍 查找资源文件:', href);
-      
       const file = this.zip.file(href);
       if (!file) {
-        console.warn('⚠️ 资源文件未找到:', href);
-        
         // 尝试一些常见的路径变体
         const alternatives = [
           href.startsWith('/') ? href.substring(1) : '/' + href,
@@ -976,12 +880,9 @@ export class EpubReader {
         ];
         
         for (const alt of alternatives) {
-          console.log('🔄 尝试备用路径:', alt);
           const altFile = this.zip.file(alt);
           if (altFile) {
-            console.log('✅ 在备用路径找到资源:', alt);
             const content = await altFile.async('base64');
-            console.log('✅ 资源加载成功，大小:', content.length);
             return content;
           }
         }
@@ -989,12 +890,10 @@ export class EpubReader {
         return null;
       }
 
-      console.log('✅ 找到资源文件，开始加载...');
       const content = await file.async('base64');
-      console.log('✅ 资源加载成功，大小:', content.length);
       return content;
     } catch (error) {
-      console.warn(`❌ 资源加载失败: ${href}`, error);
+      console.error(`❌ 资源加载失败: ${href}`, error);
       return null;
     }
   }

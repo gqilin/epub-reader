@@ -41,15 +41,34 @@
     
     <div class="toc-card">
       <h3>Table of Contents</h3>
-      <div class="toc">
+      <div class="toc-info" v-if="tableOfContents.length === 0">
+        <p>No table of contents found</p>
+      </div>
+      <div class="toc" v-else>
         <div 
           v-for="item in tableOfContents" 
           :key="item.id"
           class="toc-item"
           @click="$emit('chapter-selected', item.href)"
         >
-          {{ item.title }}
+          <div class="toc-title">{{ item.title }}</div>
+          <div class="toc-href">{{ item.href }}</div>
+          <!-- 递归显示子目录 -->
+          <div v-if="item.children && item.children.length > 0" class="toc-children">
+            <div 
+              v-for="child in item.children" 
+              :key="child.id"
+              class="toc-item toc-child"
+              @click.stop="$emit('chapter-selected', child.href)"
+            >
+              <div class="toc-title">{{ child.title }}</div>
+              <div class="toc-href">{{ child.href }}</div>
+            </div>
+          </div>
         </div>
+      </div>
+      <div class="toc-stats">
+        <small>{{ tableOfContents.length }} chapters found</small>
       </div>
     </div>
   </div>
@@ -74,39 +93,23 @@ const coverImage = ref<string | null>(null);
 const loading = ref(true);
 
 const loadCover = async () => {
-  console.group('🖼️ EpubInfo: 开始加载封面');
   loading.value = true;
   
   try {
-    console.log('🔍 开始封面加载流程...');
     coverImage.value = await props.reader.getCoverImage();
-    
-    if (coverImage.value) {
-      console.log('✅ 封面加载成功');
-      console.log('📋 封面URL长度:', coverImage.value.length);
-      console.log('🖼️ 封面URL前缀:', coverImage.value.substring(0, 50) + '...');
-    } else {
-      console.warn('⚠️ 封面未找到');
-    }
   } catch (error) {
-    console.error('❌ 封面加载失败:', error);
+    console.error('封面加载失败:', error);
   } finally {
     loading.value = false;
-    console.groupEnd();
   }
 };
 
 const tryLoadCover = () => {
-  console.log('🔄 用户点击重试加载封面');
   loadCover();
 };
 
-const onCoverLoad = () => {
-  console.log('✅ 封面图片加载完成');
-};
-
 const onCoverError = (event: Event) => {
-  console.error('❌ 封面图片显示失败:', event);
+  console.error('封面图片显示失败:', event);
   const img = event.target as HTMLImageElement;
   img.style.display = 'none';
 };
@@ -250,5 +253,48 @@ onMounted(loadCover);
 
 .toc-item:active {
   background: #e0e0e0;
+}
+
+.toc-title {
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 0.25rem;
+}
+
+.toc-href {
+  font-size: 0.8rem;
+  color: #888;
+  font-family: monospace;
+}
+
+.toc-children {
+  margin-left: 1rem;
+  margin-top: 0.5rem;
+  border-left: 2px solid #e0e0e0;
+  padding-left: 0.5rem;
+}
+
+.toc-child {
+  background: #fafafa;
+  margin-bottom: 0.25rem;
+}
+
+.toc-child:hover {
+  background: #f5f5f5;
+}
+
+.toc-info {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+  font-style: italic;
+}
+
+.toc-stats {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+  text-align: center;
+  color: #888;
 }
 </style>

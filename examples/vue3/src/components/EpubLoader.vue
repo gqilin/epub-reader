@@ -81,14 +81,6 @@ const loadEpub = async (file: File) => {
   loading.value = true;
   error.value = '';
   
-  console.group('📂 EpubLoader 开始处理文件');
-  console.log('文件信息:', {
-    name: file.name,
-    size: `${(file.size / 1024 / 1024).toFixed(2)}MB`,
-    type: file.type,
-    lastModified: new Date(file.lastModified).toISOString()
-  });
-  
   try {
     // 文件类型检查
     if (!file.name.toLowerCase().endsWith('.epub')) {
@@ -103,13 +95,8 @@ const loadEpub = async (file: File) => {
       throw new Error('文件过大（超过100MB），可能超出浏览器处理能力');
     }
     
-    console.log('文件检查通过，创建EpubReader实例...');
     const reader = new EpubReader();
-    
-    console.log('开始加载EPUB...');
     await reader.load(file);
-    
-    console.log('EPUB加载成功');
     emit('loaded', reader);
     
   } catch (err) {
@@ -151,7 +138,6 @@ const loadEpub = async (file: File) => {
     error.value = userError;
   } finally {
     loading.value = false;
-    console.groupEnd();
   }
 };
 
