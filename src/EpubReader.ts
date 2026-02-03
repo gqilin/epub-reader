@@ -140,6 +140,9 @@ export class EpubReader {
   private zip: JSZip | null = null;
   private info: EpubInfo | null = null;
   private options: EpubReaderOptions;
+  private currentChapterContent: string = '';
+  private targetElementId: string = '';
+  private currentChapterIndex: number = 0;
 
   constructor(options: EpubReaderOptions = {}) {
     this.options = {
@@ -147,6 +150,11 @@ export class EpubReader {
       loadCover: true,
       ...options,
     };
+
+    // 如果初始化时提供了目标元素ID，保存它
+    if (options.targetElementId) {
+      this.targetElementId = options.targetElementId;
+    }
   }
 
   async load(epubData: ArrayBuffer | Uint8Array | Blob): Promise<void> {
@@ -173,6 +181,20 @@ export class EpubReader {
       // 使用JSZip包装器加载
       this.zip = await JSZipWrapper.loadAsync(data);
       await this.parseEpub();
+      
+      // 如果设置了目标元素ID，自动加载第一章
+      if (this.targetElementId) {
+        // 延迟执行，确保DOM已经渲染
+        setTimeout(async () => {
+          try {
+            await this.loadChapterByIndex(0, {
+              showLoading: false // 静默加载，避免显示加载状态
+            });
+          } catch (error) {
+            console.warn('自动加载第一章失败:', error);
+          }
+        }, 100); // 100ms延迟，确保Vue组件已渲染DOM
+      }
       
     } catch (error) {
       // 处理JSZip兼容性问题
@@ -896,5 +918,621 @@ export class EpubReader {
       console.error(`❌ 资源加载失败: ${href}`, error);
       return null;
     }
+  }
+
+  /**
+   * 渲染章节内容到指定的DOM元素
+   * @param chapterIndex 章节索引
+   * @param elementId 目标DOM元素的ID（可选，使用初始化时的ID）
+   * @param options 渲染选项
+   */
+  async renderChapter(
+    chapterIndex: number, 
+    elementId?: string, 
+    options: {
+      showLoading?: boolean;
+      className?: string;
+      onError?: (error: Error) => void;
+      onSuccess?: () => void;
+    } = {}
+  ): Promise<void> {
+    const {
+      showLoading = true,
+      className = 'epub-chapter-content',
+      onError,
+      onSuccess
+    } = options;
+
+    // 确定目标元素ID
+    const targetId = elementId || this.targetElementId;
+    if (!targetId) {
+      const error = new Error('未指定目标元素ID，请在初始化时设置或传入参数');
+      onError?.(error);
+      throw error;
+    }
+
+    // 等待DOM元素存在（最多等待2秒）
+    const targetElement = await this.waitForElement(targetId, 2000);
+    if (!targetElement) {
+      const error = new Error(`目标元素不存在: #${targetId}，请确保DOM元素已创建`);
+      onError?.(error);
+      throw error;
+    }
+
+    // 保存当前使用的元素ID
+    this.targetElementId = targetId;
+
+    try {
+      // 显示加载状态
+      if (showLoading) {
+        this.showLoadingState(targetElement);
+      }
+
+      // 更新当前章节索引
+      this.currentChapterIndex = chapterIndex;
+
+      // 获取章节内容
+      this.currentChapterContent = await this.getChapterContentByIndex(chapterIndex);
+
+      // 渲染内容
+      this.renderContentToElement(targetElement, this.currentChapterContent, className);
+
+      // 应用样式
+      this.applyChapterStyles(targetId);
+
+      // 处理交互
+      this.setupChapterInteractions(targetId, chapterIndex);
+
+      onSuccess?.();
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error : new Error(String(error));
+      this.showErrorState(targetElement, errorMsg);
+      onError?.(errorMsg);
+      throw errorMsg;
+    }
+  }
+
+  /**
+   * 通过章节ID渲染内容
+   */
+  async renderChapterById(
+    chapterId: string,
+    elementId?: string,
+    options?: {
+      showLoading?: boolean;
+      className?: string;
+      onError?: (error: Error) => void;
+      onSuccess?: () => void;
+    }
+  ): Promise<void> {
+    const chapters = this.getChapters();
+    const chapterIndex = chapters.findIndex(chapter => chapter.id === chapterId);
+    
+    if (chapterIndex === -1) {
+      throw new Error(`未找到章节: ${chapterId}`);
+    }
+
+    this.currentChapterIndex = chapterIndex;
+    return this.renderChapter(chapterIndex, elementId, options);
+  }
+
+  /**
+   * 通过章节href渲染内容
+   */
+  async renderChapterByHref(
+    chapterHref: string,
+    elementId?: string,
+    options?: {
+      showLoading?: boolean;
+      className?: string;
+      onError?: (error: Error) => void;
+      onSuccess?: () => void;
+    }
+  ): Promise<void> {
+    const chapters = this.getChapters();
+    const chapterIndex = chapters.findIndex(chapter => chapter.href === chapterHref);
+    
+    if (chapterIndex === -1) {
+      throw new Error(`未找到章节: ${chapterHref}`);
+    }
+
+    this.currentChapterIndex = chapterIndex;
+    return this.renderChapter(chapterIndex, elementId, options);
+  }
+
+  /**
+   * 加载上一章
+   * @param options 渲染选项
+   */
+  async previousChapter(options?: {
+    showLoading?: boolean;
+    className?: string;
+    onError?: (error: Error) => void;
+    onSuccess?: () => void;
+  }): Promise<void> {
+    const chapters = this.getChapters();
+    const newIndex = this.currentChapterIndex - 1;
+    
+    if (newIndex < 0) {
+      throw new Error('已经是第一章了');
+    }
+
+    return this.renderChapter(newIndex, undefined, options);
+  }
+
+  /**
+   * 加载下一章
+   * @param options 渲染选项
+   */
+  async nextChapter(options?: {
+    showLoading?: boolean;
+    className?: string;
+    onError?: (error: Error) => void;
+    onSuccess?: () => void;
+  }): Promise<void> {
+    const chapters = this.getChapters();
+    const newIndex = this.currentChapterIndex + 1;
+    
+    if (newIndex >= chapters.length) {
+      throw new Error('已经是最后一章了');
+    }
+
+    return this.renderChapter(newIndex, undefined, options);
+  }
+
+  /**
+   * 通过href加载章节内容（使用初始化时设置的目标元素）
+   * @param chapterHref 章节href
+   * @param options 渲染选项
+   */
+  async loadChapterByHref(
+    chapterHref: string,
+    options?: {
+      showLoading?: boolean;
+      className?: string;
+      onError?: (error: Error) => void;
+      onSuccess?: () => void;
+    }
+  ): Promise<void> {
+    return this.renderChapterByHref(chapterHref, undefined, options);
+  }
+
+  /**
+   * 通过章节ID加载章节内容（使用初始化时设置的目标元素）
+   * @param chapterId 章节ID
+   * @param options 渲染选项
+   */
+  async loadChapterById(
+    chapterId: string,
+    options?: {
+      showLoading?: boolean;
+      className?: string;
+      onError?: (error: Error) => void;
+      onSuccess?: () => void;
+    }
+  ): Promise<void> {
+    return this.renderChapterById(chapterId, undefined, options);
+  }
+
+  /**
+   * 通过索引加载章节内容（使用初始化时设置的目标元素）
+   * @param chapterIndex 章节索引
+   * @param options 渲染选项
+   */
+  async loadChapterByIndex(
+    chapterIndex: number,
+    options?: {
+      showLoading?: boolean;
+      className?: string;
+      onError?: (error: Error) => void;
+      onSuccess?: () => void;
+    }
+  ): Promise<void> {
+    return this.renderChapter(chapterIndex, undefined, options);
+  }
+
+  /**
+   * 清空目标元素
+   */
+  clearTarget(elementId: string): void {
+    const targetElement = document.getElementById(elementId);
+    if (targetElement) {
+      targetElement.innerHTML = '';
+    }
+  }
+
+  /**
+   * 显示加载状态
+   */
+  private showLoadingState(element: HTMLElement): void {
+    element.innerHTML = `
+      <div class="epub-loading">
+        <div class="epub-loading-spinner"></div>
+        <div class="epub-loading-text">正在加载章节内容...</div>
+      </div>
+    `;
+  }
+
+  /**
+   * 显示错误状态
+   */
+  private showErrorState(element: HTMLElement, error: Error): void {
+    element.innerHTML = `
+      <div class="epub-error">
+        <div class="epub-error-icon">❌</div>
+        <div class="epub-error-message">加载失败</div>
+        <div class="epub-error-detail">${error.message}</div>
+        <button class="epub-retry-btn" onclick="this.parentElement.innerHTML = ''">重试</button>
+      </div>
+    `;
+  }
+
+  /**
+   * 渲染内容到元素
+   */
+  private renderContentToElement(element: HTMLElement, content: string, className: string): void {
+    element.innerHTML = `<div class="${className}">${content}</div>`;
+  }
+
+  /**
+   * 应用章节样式
+   */
+  private applyChapterStyles(elementId: string): void {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    // 创建或更新样式
+    let styleElement = document.getElementById('epub-chapter-styles');
+    if (!styleElement) {
+      styleElement = document.createElement('style');
+      styleElement.id = 'epub-chapter-styles';
+      styleElement.textContent = this.getChapterStyles();
+      document.head.appendChild(styleElement);
+    }
+  }
+
+  /**
+   * 获取章节样式
+   */
+  private getChapterStyles(): string {
+    return `
+      #${this.targetElementId} .epub-chapter-content {
+        line-height: 1.8;
+        font-size: 16px;
+        color: #333;
+        max-width: 100%;
+        word-wrap: break-word;
+        padding: 20px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+
+      #${this.targetElementId} .epub-chapter-content img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 1rem auto;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      }
+
+      #${this.targetElementId} .epub-chapter-content p {
+        margin-bottom: 1rem;
+        text-align: justify;
+        text-indent: 2em;
+      }
+
+      #${this.targetElementId} .epub-chapter-content h1,
+      #${this.targetElementId} .epub-chapter-content h2,
+      #${this.targetElementId} .epub-chapter-content h3,
+      #${this.targetElementId} .epub-chapter-content h4,
+      #${this.targetElementId} .epub-chapter-content h5,
+      #${this.targetElementId} .epub-chapter-content h6 {
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+        color: #222;
+        font-weight: 600;
+        line-height: 1.4;
+      }
+
+      #${this.targetElementId} .epub-chapter-content h1 { font-size: 2em; }
+      #${this.targetElementId} .epub-chapter-content h2 { font-size: 1.8em; }
+      #${this.targetElementId} .epub-chapter-content h3 { font-size: 1.6em; }
+      #${this.targetElementId} .epub-chapter-content h4 { font-size: 1.4em; }
+      #${this.targetElementId} .epub-chapter-content h5 { font-size: 1.2em; }
+      #${this.targetElementId} .epub-chapter-content h6 { font-size: 1em; }
+
+      #${this.targetElementId} .epub-chapter-content ul,
+      #${this.targetElementId} .epub-chapter-content ol {
+        margin: 1rem 0;
+        padding-left: 2rem;
+      }
+
+      #${this.targetElementId} .epub-chapter-content li {
+        margin-bottom: 0.5rem;
+      }
+
+      #${this.targetElementId} .epub-chapter-content blockquote {
+        margin: 1.5rem 0;
+        padding: 1rem 1.5rem;
+        border-left: 4px solid #007bff;
+        background: #f8f9fa;
+        font-style: italic;
+        color: #555;
+      }
+
+      #${this.targetElementId} .epub-chapter-content table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1rem 0;
+      }
+
+      #${this.targetElementId} .epub-chapter-content th,
+      #${this.targetElementId} .epub-chapter-content td {
+        border: 1px solid #ddd;
+        padding: 0.75rem;
+        text-align: left;
+      }
+
+      #${this.targetElementId} .epub-chapter-content th {
+        background: #f8f9fa;
+        font-weight: 600;
+      }
+
+      #${this.targetElementId} .epub-chapter-content a {
+        color: #007bff;
+        text-decoration: none;
+        transition: color 0.2s;
+      }
+
+      #${this.targetElementId} .epub-chapter-content a:hover {
+        color: #0056b3;
+        text-decoration: underline;
+      }
+
+      #${this.targetElementId} .epub-chapter-content code {
+        background: #f1f3f4;
+        padding: 0.2rem 0.4rem;
+        border-radius: 3px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9em;
+      }
+
+      #${this.targetElementId} .epub-chapter-content pre {
+        background: #f1f3f4;
+        padding: 1rem;
+        border-radius: 4px;
+        overflow-x: auto;
+        margin: 1rem 0;
+      }
+
+      .epub-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem;
+        color: #666;
+      }
+
+      .epub-loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #007bff;
+        border-radius: 50%;
+        animation: epub-spin 1s linear infinite;
+        margin-bottom: 1rem;
+      }
+
+      .epub-loading-text {
+        font-size: 16px;
+      }
+
+      @keyframes epub-spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      .epub-error {
+        text-align: center;
+        padding: 3rem;
+        color: #dc3545;
+      }
+
+      .epub-error-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+      }
+
+      .epub-error-message {
+        font-size: 1.2rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+      }
+
+      .epub-error-detail {
+        margin-bottom: 1.5rem;
+        color: #666;
+        font-size: 0.9rem;
+      }
+
+      .epub-retry-btn {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 0.5rem 1.5rem;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.2s;
+      }
+
+      .epub-retry-btn:hover {
+        background: #0056b3;
+      }
+
+      @media (max-width: 768px) {
+        #${this.targetElementId} .epub-chapter-content {
+          padding: 15px;
+          font-size: 14px;
+        }
+        
+        #${this.targetElementId} .epub-chapter-content p {
+          text-indent: 1.5em;
+        }
+      }
+    `;
+  }
+
+  /**
+   * 设置章节交互
+   */
+  private setupChapterInteractions(elementId: string, chapterIndex: number): void {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    // 为内部链接添加点击处理
+    const links = element.querySelectorAll('a[href]');
+    links.forEach(link => {
+      const href = link.getAttribute('href');
+      if (href && href.startsWith('#')) {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          const targetId = href.substring(1);
+          const targetElement = document.getElementById(targetId);
+          if (targetElement) {
+            targetElement.scrollIntoView({ behavior: 'smooth' });
+          }
+        });
+      }
+    });
+
+    // 为图片添加点击放大功能
+    const images = element.querySelectorAll('img');
+    images.forEach(img => {
+      img.style.cursor = 'pointer';
+      img.addEventListener('click', () => {
+        this.showImageModal(img as HTMLImageElement);
+      });
+    });
+  }
+
+  /**
+   * 显示图片模态框
+   */
+  private showImageModal(img: HTMLImageElement): void {
+    // 创建模态框
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      cursor: pointer;
+    `;
+
+    // 创建图片
+    const modalImg = document.createElement('img');
+    modalImg.src = img.src;
+    modalImg.style.cssText = `
+      max-width: 90%;
+      max-height: 90%;
+      object-fit: contain;
+      border-radius: 4px;
+    `;
+
+    // 点击关闭
+    modal.appendChild(modalImg);
+    modal.addEventListener('click', () => {
+      document.body.removeChild(modal);
+    });
+
+    document.body.appendChild(modal);
+  }
+
+  /**
+   * 获取当前渲染的章节内容
+   */
+  getCurrentChapterContent(): string {
+    return this.currentChapterContent;
+  }
+
+  /**
+   * 获取目标元素ID
+   */
+  getTargetElementId(): string {
+    return this.targetElementId;
+  }
+
+  /**
+   * 获取当前章节索引
+   */
+  getCurrentChapterIndex(): number {
+    return this.currentChapterIndex;
+  }
+
+  /**
+   * 设置当前章节索引
+   */
+  setCurrentChapterIndex(index: number): void {
+    const chapters = this.getChapters();
+    if (index >= 0 && index < chapters.length) {
+      this.currentChapterIndex = index;
+    }
+  }
+
+  /**
+   * 检查是否有上一章
+   */
+  hasPreviousChapter(): boolean {
+    return this.currentChapterIndex > 0;
+  }
+
+  /**
+   * 检查是否有下一章
+   */
+  hasNextChapter(): boolean {
+    const chapters = this.getChapters();
+    return this.currentChapterIndex < chapters.length - 1;
+  }
+
+  /**
+   * 获取当前章节信息
+   */
+  getCurrentChapter(): EpubChapter | null {
+    const chapters = this.getChapters();
+    if (this.currentChapterIndex >= 0 && this.currentChapterIndex < chapters.length) {
+      return chapters[this.currentChapterIndex];
+    }
+    return null;
+  }
+
+  /**
+   * 等待DOM元素存在
+   * @param elementId 元素ID
+   * @param timeout 超时时间（毫秒）
+   */
+  private async waitForElement(elementId: string, timeout: number = 2000): Promise<HTMLElement | null> {
+    const startTime = Date.now();
+    
+    while (Date.now() - startTime < timeout) {
+      const element = document.getElementById(elementId);
+      if (element) {
+        return element;
+      }
+      
+      // 每50ms检查一次
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    
+    return null;
   }
 }

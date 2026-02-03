@@ -1,33 +1,26 @@
 <template>
   <div class="epub-viewer">
     <div class="viewer-header">
-      <button @click="previousChapter" :disabled="currentChapterIndex === 0" class="nav-btn">
+      <button @click="onPreviousChapter" :disabled="!hasPreviousChapter" class="nav-btn">
         ← Previous
       </button>
       
-      <select v-model="currentChapterIndex" class="chapter-select">
+      <select v-model="currentChapterIndex" class="chapter-select" @change="onChapterChange">
         <option v-for="(chapter, index) in chapters" :key="chapter.id" :value="index">
           {{ getChapterTitle(chapter, index) }}
         </option>
       </select>
       
-      <button @click="nextChapter" :disabled="currentChapterIndex >= chapters.length - 1" class="nav-btn">
+      <button @click="onNextChapter" :disabled="!hasNextChapter" class="nav-btn">
         Next →
       </button>
     </div>
     
     <div class="content-container">
-      <div v-if="loading" class="loading-chapter">
-        <div class="spinner"></div>
-        <p>Loading chapter...</p>
+      <!-- 章节内容现在由父组件App.vue提供 -->
+      <div class="chapter-placeholder">
+        <p>章节内容将在下方显示</p>
       </div>
-      
-      <div v-else-if="error" class="error-chapter">
-        <p>❌ {{ error }}</p>
-        <button @click="loadCurrentChapter" class="retry-btn">Retry</button>
-      </div>
-      
-      <div v-else class="chapter-content" v-html="chapterContent"></div>
     </div>
     
     <div class="viewer-footer">
@@ -37,7 +30,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onUnmounted } from 'vue';
 import { EpubReader, EpubChapter } from 'epub-reader-src';
 
 interface Props {
@@ -47,35 +40,59 @@ interface Props {
 const props = defineProps<Props>();
 
 const chapters = ref<EpubChapter[]>(props.reader.getChapters());
-const currentChapterIndex = ref(0);
-const chapterContent = ref('');
-const loading = ref(false);
-const error = ref('');
+const currentChapterIndex = ref(props.reader.getCurrentChapterIndex());
+const hasPreviousChapter = ref(props.reader.hasPreviousChapter());
+const hasNextChapter = ref(props.reader.hasNextChapter());
 
-const loadCurrentChapter = async () => {
-  if (chapters.value.length === 0) return;
-  
-  loading.value = true;
-  error.value = '';
+const onPreviousChapter = async () => {
+  if (!props.reader.hasPreviousChapter()) return;
   
   try {
-    chapterContent.value = await props.reader.getChapterContentByIndex(currentChapterIndex.value);
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to load chapter';
-  } finally {
-    loading.value = false;
+    await props.reader.previousChapter({
+      showLoading: true,
+      onError: (error) => {
+        console.error('上一章加载失败:', error);
+      },
+      onSuccess: () => {
+        updateNavigationState();
+      }
+    });
+  } catch (error) {
+    console.error('Failed to load previous chapter:', error);
   }
 };
 
-const previousChapter = () => {
-  if (currentChapterIndex.value > 0) {
-    currentChapterIndex.value--;
+const onNextChapter = async () => {
+  if (!props.reader.hasNextChapter()) return;
+  
+  try {
+    await props.reader.nextChapter({
+      showLoading: true,
+      onError: (error) => {
+        console.error('下一章加载失败:', error);
+      },
+      onSuccess: () => {
+        updateNavigationState();
+      }
+    });
+  } catch (error) {
+    console.error('Failed to load next chapter:', error);
   }
 };
 
-const nextChapter = () => {
-  if (currentChapterIndex.value < chapters.value.length - 1) {
-    currentChapterIndex.value++;
+const onChapterChange = async () => {
+  try {
+    await props.reader.loadChapterByIndex(currentChapterIndex.value, {
+      showLoading: true,
+      onError: (error) => {
+        console.error('章节加载失败:', error);
+      },
+      onSuccess: () => {
+        updateNavigationState();
+      }
+    });
+  } catch (error) {
+    console.error('Failed to load chapter:', error);
   }
 };
 
@@ -85,9 +102,25 @@ const getChapterTitle = (chapter: EpubChapter, index: number): string => {
   return tocItem?.title || `Chapter ${index + 1}`;
 };
 
-watch(currentChapterIndex, loadCurrentChapter);
+const onRenderError = (event: Event) => {
+  console.error('Rendering error:', event);
+};
 
-onMounted(loadCurrentChapter);
+const updateNavigationState = () => {
+  currentChapterIndex.value = props.reader.getCurrentChapterIndex();
+  hasPreviousChapter.value = props.reader.hasPreviousChapter();
+  hasNextChapter.value = props.reader.hasNextChapter();
+};
+
+// 确保DOM元素存在并清理样式
+onUnmounted(() => {
+  const styleElement = document.getElementById('epub-chapter-styles');
+  if (styleElement) {
+    document.head.removeChild(styleElement);
+  }
+});
+
+
 </script>
 
 <style scoped>
@@ -139,78 +172,19 @@ onMounted(loadCurrentChapter);
 .content-container {
   flex: 1;
   overflow-y: auto;
-  padding: 2rem;
+  padding: 1rem;
 }
 
-.loading-chapter {
-  text-align: center;
-  padding: 3rem;
-}
-
-.spinner {
-  width: 30px;
-  height: 30px;
-  border: 3px solid #f3f3f3;
-  border-top: 3px solid #007bff;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 1rem auto;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.error-chapter {
-  text-align: center;
-  padding: 3rem;
-}
-
-.error-chapter p {
-  color: #c00;
-  margin-bottom: 1rem;
-}
-
-.retry-btn {
-  background: #dc3545;
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.retry-btn:hover {
-  background: #c82333;
-}
-
-.chapter-content {
-  line-height: 1.6;
-  font-size: 1rem;
-  color: #333;
-}
-
-.chapter-content :deep(img) {
-  max-width: 100%;
-  height: auto;
-  display: block;
-  margin: 1rem auto;
-}
-
-.chapter-content :deep(p) {
-  margin-bottom: 1rem;
-}
-
-.chapter-content :deep(h1),
-.chapter-content :deep(h2),
-.chapter-content :deep(h3),
-.chapter-content :deep(h4),
-.chapter-content :deep(h5),
-.chapter-content :deep(h6) {
-  margin-top: 2rem;
-  margin-bottom: 1rem;
-  color: #222;
+.chapter-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 2px dashed #ddd;
+  color: #666;
+  font-style: italic;
 }
 
 .viewer-footer {

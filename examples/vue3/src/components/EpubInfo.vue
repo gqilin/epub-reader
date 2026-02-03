@@ -49,7 +49,7 @@
           v-for="item in tableOfContents" 
           :key="item.id"
           class="toc-item"
-          @click="$emit('chapter-selected', item.href)"
+          @click="selectChapter(item)"
         >
           <div class="toc-title">{{ item.title }}</div>
           <div class="toc-href">{{ item.href }}</div>
@@ -59,7 +59,7 @@
               v-for="child in item.children" 
               :key="child.id"
               class="toc-item toc-child"
-              @click.stop="$emit('chapter-selected', child.href)"
+              @click.stop="selectChapter(child)"
             >
               <div class="toc-title">{{ child.title }}</div>
               <div class="toc-href">{{ child.href }}</div>
@@ -84,7 +84,7 @@ interface Props {
 
 const props = defineProps<Props>();
 const emit = defineEmits<{
-  'chapter-selected': [href: string];
+  'chapter-selected': [chapter: EpubTableOfContents];
 }>();
 
 const metadata = ref(props.reader.getMetadata() || {});
@@ -112,6 +112,10 @@ const onCoverError = (event: Event) => {
   console.error('封面图片显示失败:', event);
   const img = event.target as HTMLImageElement;
   img.style.display = 'none';
+};
+
+const selectChapter = (chapter: EpubTableOfContents) => {
+  emit('chapter-selected', chapter);
 };
 
 onMounted(loadCover);

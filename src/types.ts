@@ -47,4 +47,5 @@ export interface EpubInfo {
 export interface EpubReaderOptions {
   encoding?: string;
   loadCover?: boolean;
+  targetElementId?: string;
 }

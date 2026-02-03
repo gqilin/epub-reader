@@ -95,7 +95,9 @@ const loadEpub = async (file: File) => {
       throw new Error('文件过大（超过100MB），可能超出浏览器处理能力');
     }
     
-    const reader = new EpubReader();
+    const reader = new EpubReader({
+      targetElementId: 'epub-chapter-container'
+    });
     await reader.load(file);
     emit('loaded', reader);
     
@@ -140,6 +142,8 @@ const loadEpub = async (file: File) => {
     loading.value = false;
   }
 };
+
+
 
 const formatError = (error: string) => {
   return error.replace(/\n/g, '<br>');
