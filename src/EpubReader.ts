@@ -633,11 +633,180 @@ export class EpubReader {
     if (!this.zip) throw new Error('EPUB not loaded');
 
     try {
+      console.group('📄 加载章节内容');
+      console.log('章节路径:', chapterHref);
+      
       const content = await this.getFileContent(chapterHref);
-      return content;
+      console.log('原始内容长度:', content.length);
+      
+      // 处理资源引用（图片、CSS等）
+      const processedContent = await this.processContentResources(content, chapterHref);
+      console.log('处理后内容长度:', processedContent.length);
+      console.groupEnd();
+      
+      return processedContent;
     } catch (error) {
+      console.error('❌ 章节加载失败:', error);
       throw new Error(`Failed to load chapter content: ${chapterHref}`);
     }
+  }
+
+  private async processContentResources(htmlContent: string, chapterHref: string): Promise<string> {
+    console.group('🖼️ 处理资源引用');
+    
+    // 获取章节的基础路径
+    const chapterPath = chapterHref.substring(0, chapterHref.lastIndexOf('/') + 1);
+    console.log('章节基础路径:', chapterPath);
+    
+    // 处理图片标签
+    let processedContent = htmlContent;
+    
+    // 使用正则表达式找到所有的img标签
+    const imgRegex = /<img([^>]+)src\s*=\s*['"]([^'"]+)['"]([^>]*)>/gi;
+    let match;
+    const imgPromises: Promise<void>[] = [];
+    const imgReplacements: Array<{ original: string; replacement: string }> = [];
+    
+    while ((match = imgRegex.exec(htmlContent)) !== null) {
+      const [fullMatch, beforeSrc, src, afterSrc] = match;
+      console.log('🖼️ 发现图片:', src);
+      
+      // 跳过已经是data URL或完整URL的图片
+      if (src.startsWith('data:') || src.startsWith('http')) {
+        console.log('⏭️ 跳过data URL或HTTP URL:', src);
+        continue;
+      }
+      
+      // 处理相对路径
+      const fullImagePath = this.resolveResourcePath(src, chapterPath);
+      console.log('🔗 解析后路径:', fullImagePath);
+      
+      // 创建异步处理promise
+      const promise = this.processImageResource(fullImagePath, src, beforeSrc, afterSrc)
+        .then(replacement => {
+          if (replacement) {
+            imgReplacements.push({ original: fullMatch, replacement });
+          }
+        })
+        .catch(error => {
+          console.warn('⚠️ 图片处理失败:', src, error);
+        });
+      
+      imgPromises.push(promise);
+    }
+    
+    // 等待所有图片处理完成
+    if (imgPromises.length > 0) {
+      console.log(`⏳ 处理 ${imgPromises.length} 个图片资源...`);
+      await Promise.all(imgPromises);
+    }
+    
+    // 替换所有处理完成的图片标签
+    for (const { original, replacement } of imgReplacements) {
+      processedContent = processedContent.replace(original, replacement);
+      console.log('✅ 替换图片标签完成');
+    }
+    
+    // 处理CSS链接
+    const cssRegex = /<link([^>]+)href\s*=\s*['"]([^'"]+)['"]([^>]*)>/gi;
+    const cssReplacements: Array<{ original: string; replacement: string }> = [];
+    
+    while ((match = cssRegex.exec(processedContent)) !== null) {
+      const [fullMatch, beforeHref, href, afterHref] = match;
+      console.log('🎨 发现CSS:', href);
+      
+      if (href.startsWith('http')) {
+        console.log('⏭️ 跳过HTTP CSS:', href);
+        continue;
+      }
+      
+      const fullCssPath = this.resolveResourcePath(href, chapterPath);
+      console.log('🔗 CSS解析后路径:', fullCssPath);
+      
+      // 这里可以添加CSS处理逻辑，暂时跳过
+      console.log('⏭️ CSS处理暂时跳过');
+    }
+    
+    console.log('✅ 资源处理完成');
+    console.groupEnd();
+    
+    return processedContent;
+  }
+
+  private resolveResourcePath(resourcePath: string, basePath: string): string {
+    // 移除开头的 ./
+    let cleanPath = resourcePath.startsWith('./') ? resourcePath.substring(2) : resourcePath;
+    
+    // 如果已经是绝对路径，直接返回
+    if (cleanPath.startsWith('/')) {
+      return cleanPath.substring(1); // 移除开头的 /
+    }
+    
+    // 结合基础路径
+    return basePath + cleanPath;
+  }
+
+  private async processImageResource(
+    fullImagePath: string, 
+    originalSrc: string, 
+    beforeSrc: string, 
+    afterSrc: string
+  ): Promise<string | null> {
+    try {
+      console.log('🖼️ 开始处理图片资源:', fullImagePath);
+      
+      // 尝试从ZIP文件中获取图片
+      const imageData = await this.getResource(fullImagePath);
+      
+      if (!imageData) {
+        console.warn('⚠️ 图片资源未找到:', fullImagePath);
+        // 返回带错误标记的img标签
+        return `<img${beforeSrc}src="data:image/svg+xml;base64,${btoa(`
+          <svg width="200" height="100" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100%" height="100%" fill="#f0f0f0"/>
+            <text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="#666" font-size="12">
+              图片未找到: ${originalSrc}
+            </text>
+          </svg>
+        `.replace(/\s+/g, ' '))}"${afterSrc} style="border: 1px dashed #ccc;"/>`;
+      }
+      
+      // 确定图片MIME类型
+      const mimeType = this.getImageMimeType(fullImagePath);
+      console.log('📋 图片MIME类型:', mimeType);
+      
+      // 创建data URL
+      const dataUrl = `data:${mimeType};base64,${imageData}`;
+      console.log('✅ 图片data URL创建成功');
+      
+      return `<img${beforeSrc}src="${dataUrl}"${afterSrc}>`;
+      
+    } catch (error) {
+      console.error('❌ 图片处理错误:', error);
+      return `<img${beforeSrc}src="data:image/svg+xml;base64,${btoa(`
+        <svg width="200" height="100" xmlns="http://www.w3.org/2000/svg">
+          <rect width="100%" height="100%" fill="#ffebee"/>
+          <text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="#c62828" font-size="12">
+            图片加载失败: ${originalSrc}
+          </text>
+        </svg>
+      `.replace(/\s+/g, ' '))}"${afterSrc} style="border: 1px dashed #f44336;"/>`;
+    }
+  }
+
+  private getImageMimeType(filePath: string): string {
+    const extension = filePath.split('.').pop()?.toLowerCase();
+    const mimeTypes: { [key: string]: string } = {
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'bmp': 'image/bmp',
+      'svg': 'image/svg+xml',
+      'webp': 'image/webp'
+    };
+    
+    return mimeTypes[extension || ''] || 'image/jpeg';
   }
 
   async getChapterContentByIndex(index: number): Promise<string> {
@@ -652,24 +821,140 @@ export class EpubReader {
   async getCoverImage(): Promise<string | null> {
     if (!this.zip || !this.options.loadCover) return null;
 
-    const metadata = this.getMetadata();
-    if (!metadata?.cover) return null;
-
-    const manifest = this.info?.manifest || [];
-    const coverItem = manifest.find(item => item.id === metadata.cover);
+    console.group('🖼️ 查找封面图片');
     
-    if (!coverItem || !coverItem.mediaType.startsWith('image/')) {
+    try {
+      const metadata = this.getMetadata();
+      const manifest = this.info?.manifest || [];
+      
+      console.log('📋 元数据:', metadata);
+      console.log('📦 清单中的资源:', manifest.map(item => ({ id: item.id, href: item.href, mediaType: item.mediaType })));
+      
+      // 方法1: 通过meta标签的cover属性查找
+      if (metadata?.cover) {
+        console.log('🎯 方法1: 通过meta cover属性查找:', metadata.cover);
+        const coverItem = manifest.find(item => item.id === metadata.cover);
+        
+        if (coverItem && coverItem.mediaType.startsWith('image/')) {
+          console.log('✅ 找到封面项目:', coverItem);
+          const coverUrl = await this.loadImageResource(coverItem.href);
+          if (coverUrl) {
+            console.log('✅ 封面加载成功 (方法1)');
+            console.groupEnd();
+            return coverUrl;
+          }
+        }
+      }
+      
+      // 方法2: 查找id包含"cover"的资源
+      console.log('🎯 方法2: 查找包含cover的资源');
+      const coverItems = manifest.filter(item => 
+        item.id.toLowerCase().includes('cover') && 
+        item.mediaType.startsWith('image/')
+      );
+      
+      console.log('找到的cover相关资源:', coverItems);
+      
+      for (const coverItem of coverItems) {
+        console.log('尝试加载封面:', coverItem);
+        const coverUrl = await this.loadImageResource(coverItem.href);
+        if (coverUrl) {
+          console.log('✅ 封面加载成功 (方法2)');
+          console.groupEnd();
+          return coverUrl;
+        }
+      }
+      
+      // 方法3: 查找href包含cover的图片文件
+      console.log('🎯 方法3: 查找href包含cover的图片');
+      const coverByHref = manifest.filter(item => 
+        item.href.toLowerCase().includes('cover') && 
+        item.mediaType.startsWith('image/')
+      );
+      
+      console.log('找到的href包含cover的资源:', coverByHref);
+      
+      for (const coverItem of coverByHref) {
+        console.log('尝试加载封面:', coverItem);
+        const coverUrl = await this.loadImageResource(coverItem.href);
+        if (coverUrl) {
+          console.log('✅ 封面加载成功 (方法3)');
+          console.groupEnd();
+          return coverUrl;
+        }
+      }
+      
+      // 方法4: 查找常见的封面文件名
+      console.log('🎯 方法4: 查找常见封面文件名');
+      const commonCoverNames = [
+        'cover.jpg', 'cover.jpeg', 'cover.png', 'cover.gif',
+        'Cover.jpg', 'Cover.jpeg', 'Cover.png', 'Cover.gif',
+        'cover-image.jpg', 'cover-image.jpeg', 'cover-image.png',
+        'title.jpg', 'title.jpeg', 'title.png',
+        'front.jpg', 'front.jpeg', 'front.png'
+      ];
+      
+      for (const coverName of commonCoverNames) {
+        const coverItem = manifest.find(item => item.href === coverName);
+        if (coverItem && coverItem.mediaType.startsWith('image/')) {
+          console.log('找到常见封面文件:', coverItem);
+          const coverUrl = await this.loadImageResource(coverItem.href);
+          if (coverUrl) {
+            console.log('✅ 封面加载成功 (方法4)');
+            console.groupEnd();
+            return coverUrl;
+          }
+        }
+      }
+      
+      // 方法5: 查找第一个图片文件（作为最后的备选）
+      console.log('🎯 方法5: 使用第一个图片文件作为封面');
+      const firstImage = manifest.find(item => item.mediaType.startsWith('image/'));
+      
+      if (firstImage) {
+        console.log('使用第一个图片作为封面:', firstImage);
+        const coverUrl = await this.loadImageResource(firstImage.href);
+        if (coverUrl) {
+          console.log('✅ 封面加载成功 (方法5)');
+          console.groupEnd();
+          return coverUrl;
+        }
+      }
+      
+      console.warn('⚠️ 未找到任何封面图片');
+      console.groupEnd();
+      return null;
+      
+    } catch (error) {
+      console.error('❌ 封面加载失败:', error);
+      console.groupEnd();
       return null;
     }
+  }
 
+  private async loadImageResource(href: string): Promise<string | null> {
     try {
-      const coverFile = this.zip.file(coverItem.href);
-      if (!coverFile) return null;
-
-      const coverData = await coverFile.async('base64');
-      return `data:${coverItem.mediaType};base64,${coverData}`;
+      console.log('🖼️ 加载图片资源:', href);
+      
+      // 获取图片数据
+      const imageData = await this.getResource(href);
+      if (!imageData) {
+        console.warn('⚠️ 图片数据未找到:', href);
+        return null;
+      }
+      
+      // 确定MIME类型
+      const mimeType = this.getImageMimeType(href);
+      console.log('📋 图片MIME类型:', mimeType);
+      
+      // 创建Data URL
+      const dataUrl = `data:${mimeType};base64,${imageData}`;
+      console.log('✅ 图片Data URL创建成功');
+      
+      return dataUrl;
+      
     } catch (error) {
-      console.warn('Failed to load cover image:', error);
+      console.error('❌ 图片资源加载失败:', href, error);
       return null;
     }
   }
@@ -678,13 +963,38 @@ export class EpubReader {
     if (!this.zip) return null;
 
     try {
+      console.log('🔍 查找资源文件:', href);
+      
       const file = this.zip.file(href);
-      if (!file) return null;
+      if (!file) {
+        console.warn('⚠️ 资源文件未找到:', href);
+        
+        // 尝试一些常见的路径变体
+        const alternatives = [
+          href.startsWith('/') ? href.substring(1) : '/' + href,
+          href.startsWith('./') ? href.substring(2) : './' + href,
+        ];
+        
+        for (const alt of alternatives) {
+          console.log('🔄 尝试备用路径:', alt);
+          const altFile = this.zip.file(alt);
+          if (altFile) {
+            console.log('✅ 在备用路径找到资源:', alt);
+            const content = await altFile.async('base64');
+            console.log('✅ 资源加载成功，大小:', content.length);
+            return content;
+          }
+        }
+        
+        return null;
+      }
 
+      console.log('✅ 找到资源文件，开始加载...');
       const content = await file.async('base64');
+      console.log('✅ 资源加载成功，大小:', content.length);
       return content;
     } catch (error) {
-      console.warn(`Failed to load resource: ${href}`, error);
+      console.warn(`❌ 资源加载失败: ${href}`, error);
       return null;
     }
   }

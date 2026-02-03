@@ -4,8 +4,16 @@
       <h3>Book Information</h3>
       
       <div class="cover-container">
-        <img v-if="coverImage" :src="coverImage" alt="Book cover" class="cover-image" />
-        <div v-else class="cover-placeholder">No Cover</div>
+        <div v-if="loading" class="cover-loading">
+          <div class="cover-spinner"></div>
+          <p>Loading cover...</p>
+        </div>
+        <img v-else-if="coverImage" :src="coverImage" alt="Book cover" class="cover-image" @load="onCoverLoad" @error="onCoverError" />
+        <div v-else class="cover-placeholder" @click="tryLoadCover">
+          <div class="no-cover-icon">📚</div>
+          <div>No Cover</div>
+          <div class="retry-text">Click to retry</div>
+        </div>
       </div>
       
       <div class="book-details">
@@ -63,14 +71,47 @@ const emit = defineEmits<{
 const metadata = ref(props.reader.getMetadata() || {});
 const tableOfContents = ref(props.reader.getTableOfContents());
 const coverImage = ref<string | null>(null);
+const loading = ref(true);
 
-onMounted(async () => {
+const loadCover = async () => {
+  console.group('🖼️ EpubInfo: 开始加载封面');
+  loading.value = true;
+  
   try {
+    console.log('🔍 开始封面加载流程...');
     coverImage.value = await props.reader.getCoverImage();
+    
+    if (coverImage.value) {
+      console.log('✅ 封面加载成功');
+      console.log('📋 封面URL长度:', coverImage.value.length);
+      console.log('🖼️ 封面URL前缀:', coverImage.value.substring(0, 50) + '...');
+    } else {
+      console.warn('⚠️ 封面未找到');
+    }
   } catch (error) {
-    console.warn('Failed to load cover image:', error);
+    console.error('❌ 封面加载失败:', error);
+  } finally {
+    loading.value = false;
+    console.groupEnd();
   }
-});
+};
+
+const tryLoadCover = () => {
+  console.log('🔄 用户点击重试加载封面');
+  loadCover();
+};
+
+const onCoverLoad = () => {
+  console.log('✅ 封面图片加载完成');
+};
+
+const onCoverError = (event: Event) => {
+  console.error('❌ 封面图片显示失败:', event);
+  const img = event.target as HTMLImageElement;
+  img.style.display = 'none';
+};
+
+onMounted(loadCover);
 </script>
 
 <style scoped>
@@ -105,16 +146,64 @@ onMounted(async () => {
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 
-.cover-placeholder {
+.cover-loading {
   width: 200px;
   height: 280px;
   background: #f0f0f0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   color: #666;
   border-radius: 4px;
   margin: 0 auto;
+}
+
+.cover-spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #007bff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 0.5rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.cover-placeholder {
+  width: 200px;
+  height: 280px;
+  background: #f0f0f0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  border-radius: 4px;
+  margin: 0 auto;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px dashed #ccc;
+}
+
+.cover-placeholder:hover {
+  background: #e8e8e8;
+  border-color: #007bff;
+}
+
+.no-cover-icon {
+  font-size: 3rem;
+  margin-bottom: 0.5rem;
+}
+
+.retry-text {
+  font-size: 0.8rem;
+  color: #007bff;
+  margin-top: 0.5rem;
 }
 
 .book-details {
