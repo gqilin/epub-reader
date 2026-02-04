@@ -40,9 +40,50 @@
       <button @click="createHighlight" class="tool-btn" title="高亮">
         🟨 高亮
       </button>
-      <button @click="createUnderline" class="tool-btn" title="下划线">
-        U̲ 下划线
-      </button>
+      <div class="underline-btn-container">
+        <button @click="toggleUnderlineMenu" class="tool-btn underline-main-btn" title="下划线">
+          U̲ 下划线
+        </button>
+        <div v-if="showUnderlineMenu" class="underline-menu">
+          <div @click="createUnderline('solid')" class="underline-option" title="实线">
+            <svg width="40" height="10">
+              <line x1="0" y1="8" x2="40" y2="8" stroke="#2196f3" stroke-width="2"/>
+            </svg>
+            <span>实线</span>
+          </div>
+          <div @click="createUnderline('dashed')" class="underline-option" title="虚线">
+            <svg width="40" height="10">
+              <line x1="0" y1="8" x2="40" y2="8" stroke="#2196f3" stroke-width="2" stroke-dasharray="8,4"/>
+            </svg>
+            <span>虚线</span>
+          </div>
+          <div @click="createUnderline('dotted')" class="underline-option" title="点线">
+            <svg width="40" height="10">
+              <line x1="0" y1="8" x2="40" y2="8" stroke="#2196f3" stroke-width="2" stroke-dasharray="2,3" stroke-linecap="round"/>
+            </svg>
+            <span>点线</span>
+          </div>
+          <div @click="createUnderline('wavy')" class="underline-option" title="波浪线">
+            <svg width="40" height="10">
+              <path d="M 0 8 Q 10 3, 20 8 T 40 8" stroke="#2196f3" stroke-width="2" fill="none"/>
+            </svg>
+            <span>波浪线</span>
+          </div>
+          <div @click="createUnderline('double')" class="underline-option" title="双线">
+            <svg width="40" height="12">
+              <line x1="0" y1="6" x2="40" y2="6" stroke="#2196f3" stroke-width="2"/>
+              <line x1="0" y1="9" x2="40" y2="9" stroke="#2196f3" stroke-width="2"/>
+            </svg>
+            <span>双线</span>
+          </div>
+          <div @click="createUnderline('thick')" class="underline-option" title="粗线">
+            <svg width="40" height="10">
+              <rect x="0" y="6" width="40" height="4" fill="#2196f3"/>
+            </svg>
+            <span>粗线</span>
+          </div>
+        </div>
+      </div>
       <button @click="createNote" class="tool-btn" title="笔记">
         📝 笔记
       </button>
@@ -120,6 +161,18 @@
           </div>
           
           <div class="debug-section">
+            <h4>下划线样式分布</h4>
+            <div class="debug-info">
+              <p><strong>实线：</strong> {{ getUnderlineStyleCount('solid') }} 个</p>
+              <p><strong>虚线：</strong> {{ getUnderlineStyleCount('dashed') }} 个</p>
+              <p><strong>点线：</strong> {{ getUnderlineStyleCount('dotted') }} 个</p>
+              <p><strong>波浪线：</strong> {{ getUnderlineStyleCount('wavy') }} 个</p>
+              <p><strong>双线：</strong> {{ getUnderlineStyleCount('double') }} 个</p>
+              <p><strong>粗线：</strong> {{ getUnderlineStyleCount('thick') }} 个</p>
+            </div>
+          </div>
+          
+          <div class="debug-section">
             <h4>原始数据</h4>
             <div class="debug-json">
               <pre>{{ JSON.stringify(annotations, null, 2) }}</pre>
@@ -166,6 +219,9 @@ const showAnnotationModal = ref(false);
 const showDebugModal = ref(false);
 const annotations = ref<Annotation[]>([]);
 const debugStats = ref({ count: 0, size: 0, lastModified: null as string | null });
+
+// 下划线样式菜单状态
+const showUnderlineMenu = ref(false);
 
 // 防重复渲染状态
 let isRenderingAnnotations = false;
@@ -320,24 +376,6 @@ onUnmounted(() => {
   if (styleElement) {
     document.head.removeChild(styleElement);
   }
-  
-  // 清理标记相关的定时器
-  if (renderTimeoutId) {
-    clearTimeout(renderTimeoutId);
-    renderTimeoutId = null;
-  }
-  
-  // 重置渲染状态
-  isRenderingAnnotations = false;
-  lastRenderedChapterId = null;
-  
-  // 清理SVG覆盖层
-  const existingSvg = document.querySelector('.epub-annotation-overlay');
-  if (existingSvg) {
-    existingSvg.remove();
-  }
-  
-  console.log('🧹 组件卸载，清理标记相关资源');
 });
 
 // ==================== 标记功能方法 ====================
@@ -435,15 +473,48 @@ const createHighlight = async () => {
 };
 
 /**
+ * 切换下划线菜单
+ */
+const toggleUnderlineMenu = () => {
+  showUnderlineMenu.value = !showUnderlineMenu.value;
+};
+
+/**
  * 创建下划线标记
  */
-const createUnderline = async () => {
+const createUnderline = async (style: string = 'solid') => {
   try {
-    await props.reader.createAnnotationFromSelection('underline', { color: '#2196f3' });
+    // 关闭下划线菜单
+    showUnderlineMenu.value = false;
+    
+    // 根据样式配置参数
+    const underlineConfig = getUnderlineConfig(style);
+    
+    await props.reader.createAnnotationFromSelection('underline', {
+      color: '#2196f3',
+      underlineStyle: style,
+      underlineConfig
+    });
   } catch (error) {
     console.error('创建下划线失败:', error);
     alert('创建下划线失败: ' + (error instanceof Error ? error.message : String(error)));
   }
+};
+
+/**
+ * 获取下划线配置
+ */
+const getUnderlineConfig = (style: string) => {
+  const configs = {
+    solid: { style: 'solid' as any, thickness: 2 },
+    dashed: { style: 'dashed' as any, thickness: 2, dashPattern: '8,4' },
+    dotted: { style: 'dotted' as any, thickness: 2 },
+    wavy: { style: 'wavy' as any, thickness: 2, waveAmplitude: 3, waveFrequency: 0.1 },
+    double: { style: 'double' as any, thickness: 2, spacing: 3 },
+    thick: { style: 'thick' as any, thickness: 4 }
+  };
+  
+  return configs[style] || configs.solid;
 };
 
 /**
@@ -610,6 +681,15 @@ const updateDebugStats = () => {
  */
 const getTypeCount = (type: AnnotationType): number => {
   return annotations.value.filter(ann => ann.type === type).length;
+};
+
+/**
+ * 获取特定下划线样式的数量
+ */
+const getUnderlineStyleCount = (style: string): number => {
+  return annotations.value.filter(ann => 
+    ann.type === 'underline' && ann.underlineConfig?.style === style
+  ).length;
 };
 
 /**
@@ -900,7 +980,49 @@ onMounted(() => {
   // 可以在这里自动启用标记功能
   // annotationsEnabled.value = true;
   // initializeAnnotations();
+  
+  // 添加点击外部关闭下划线菜单
+  document.addEventListener('click', handleOutsideClick);
 });
+
+// 组件卸载时清理
+onUnmounted(() => {
+  // 移除全局点击事件
+  document.removeEventListener('click', handleOutsideClick);
+  
+  // 清理标记相关的定时器
+  if (renderTimeoutId) {
+    clearTimeout(renderTimeoutId);
+    renderTimeoutId = null;
+  }
+  
+  // 重置渲染状态
+  isRenderingAnnotations = false;
+  lastRenderedChapterId = null;
+  
+  // 清理SVG覆盖层
+  const existingSvg = document.querySelector('.epub-annotation-overlay');
+  if (existingSvg) {
+    existingSvg.remove();
+  }
+  
+  console.log('🧹 组件卸载，清理标记相关资源');
+});
+
+/**
+ * 处理点击外部关闭菜单
+ */
+const handleOutsideClick = (event: MouseEvent) => {
+  const target = event.target as HTMLElement;
+  
+  // 检查点击是否在下划线菜单或按钮外
+  const underlineBtn = target.closest('.underline-btn-container');
+  const toolbar = target.closest('.annotation-toolbar');
+  
+  if (!underlineBtn && !toolbar && showUnderlineMenu.value) {
+    showUnderlineMenu.value = false;
+  }
+};
 
 // 暴露CFI方法给父组件
 defineExpose({
@@ -1095,6 +1217,63 @@ defineExpose({
 
 .tool-btn:active {
   background: #e0e0e0;
+}
+
+/* 下划线样式菜单 */
+.underline-btn-container {
+  position: relative;
+  display: inline-block;
+}
+
+.underline-main-btn {
+  position: relative;
+}
+
+.underline-main-btn::after {
+  content: '▼';
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 8px;
+  opacity: 0.7;
+}
+
+.underline-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 10001;
+  min-width: 120px;
+  padding: 8px 0;
+  margin-top: 4px;
+}
+
+.underline-option {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  gap: 8px;
+}
+
+.underline-option:hover {
+  background: #f0f0f0;
+}
+
+.underline-option svg {
+  flex-shrink: 0;
+}
+
+.underline-option span {
+  font-size: 12px;
+  color: #333;
+  white-space: nowrap;
 }
 
 /* 标记列表弹窗样式 */
@@ -1448,6 +1627,19 @@ defineExpose({
   
   .action-btn {
     width: 100%;
+  }
+  
+  .underline-menu {
+    min-width: 100px;
+  }
+  
+  .underline-option {
+    padding: 6px 8px;
+  }
+  
+  .underline-option svg {
+    width: 30px;
+    height: 8px;
   }
 }
 </style>

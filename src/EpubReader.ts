@@ -14,6 +14,7 @@ import {
   CFICursorPosition,
   Annotation,
   AnnotationType,
+  UnderlineConfig,
   AnnotationManager,
   AnnotationOptions,
 } from './types';
@@ -451,19 +452,187 @@ class SVGOverlayManager {
   /**
    * 创建下划线标记
    */
-  private createUnderline(annotation: Annotation, x: number, y: number, width: number, height: number): SVGLineElement {
+  private createUnderline(annotation: Annotation, x: number, y: number, width: number, height: number): SVGElement {
+    const config = annotation.underlineConfig || { style: 'solid' };
+    const color = annotation.color || config.color || '#2196f3';
+    
+    switch (config.style) {
+      case 'solid':
+        return this.createSolidUnderline(annotation, x, y, width, height, color, config.thickness);
+      case 'dashed':
+        return this.createDashedUnderline(annotation, x, y, width, height, color, config);
+      case 'dotted':
+        return this.createDottedUnderline(annotation, x, y, width, height, color, config);
+      case 'wavy':
+        return this.createWavyUnderline(annotation, x, y, width, height, color, config);
+      case 'double':
+        return this.createDoubleUnderline(annotation, x, y, width, height, color, config);
+      case 'thick':
+        return this.createThickUnderline(annotation, x, y, width, height, color, config);
+      case 'custom':
+        return this.createCustomUnderline(annotation, x, y, width, height, color, config);
+      default:
+        return this.createSolidUnderline(annotation, x, y, width, height, color, config.thickness);
+    }
+  }
+  
+  /**
+   * 创建实线下划线
+   */
+  private createSolidUnderline(annotation: Annotation, x: number, y: number, width: number, height: number, color: string, thickness?: number): SVGLineElement {
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     line.setAttribute('x1', String(x));
     line.setAttribute('y1', String(y + height));
     line.setAttribute('x2', String(x + width));
     line.setAttribute('y2', String(y + height));
-    line.setAttribute('stroke', annotation.color || '#2196f3');
-    line.setAttribute('stroke-width', '2');
+    line.setAttribute('stroke', color);
+    line.setAttribute('stroke-width', String(thickness || 2));
     line.setAttribute('data-annotation-id', annotation.id);
     line.setAttribute('data-annotation-type', annotation.type);
+    line.setAttribute('data-underline-style', 'solid');
     line.style.cursor = 'pointer';
     
     return line;
+  }
+  
+  /**
+   * 创建虚线下划线
+   */
+  private createDashedUnderline(annotation: Annotation, x: number, y: number, width: number, height: number, color: string, config: UnderlineConfig): SVGLineElement {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', String(x));
+    line.setAttribute('y1', String(y + height));
+    line.setAttribute('x2', String(x + width));
+    line.setAttribute('y2', String(y + height));
+    line.setAttribute('stroke', color);
+    line.setAttribute('stroke-width', String(config.thickness || 2));
+    line.setAttribute('stroke-dasharray', config.dashPattern || '8,4');
+    line.setAttribute('data-annotation-id', annotation.id);
+    line.setAttribute('data-annotation-type', annotation.type);
+    line.setAttribute('data-underline-style', 'dashed');
+    line.style.cursor = 'pointer';
+    
+    return line;
+  }
+  
+  /**
+   * 创建点线下划线
+   */
+  private createDottedUnderline(annotation: Annotation, x: number, y: number, width: number, height: number, color: string, config: UnderlineConfig): SVGLineElement {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', String(x));
+    line.setAttribute('y1', String(y + height));
+    line.setAttribute('x2', String(x + width));
+    line.setAttribute('y2', String(y + height));
+    line.setAttribute('stroke', color);
+    line.setAttribute('stroke-width', String(config.thickness || 2));
+    line.setAttribute('stroke-dasharray', '2,3');
+    line.setAttribute('stroke-linecap', 'round');
+    line.setAttribute('data-annotation-id', annotation.id);
+    line.setAttribute('data-annotation-type', annotation.type);
+    line.setAttribute('data-underline-style', 'dotted');
+    line.style.cursor = 'pointer';
+    
+    return line;
+  }
+  
+  /**
+   * 创建波浪下划线
+   */
+  private createWavyUnderline(annotation: Annotation, x: number, y: number, width: number, height: number, color: string, config: UnderlineConfig): SVGPathElement {
+    const amplitude = config.waveAmplitude || 3;
+    const frequency = config.waveFrequency || 0.1;
+    const thickness = config.thickness || 2;
+    
+    // 生成波浪路径
+    let pathData = `M ${x} ${y + height}`;
+    const steps = Math.ceil(width / 2); // 每2像素一个点
+    
+    for (let i = 0; i <= steps; i++) {
+      const currentX = x + (width * i / steps);
+      const waveY = (y + height) + Math.sin(i * frequency * Math.PI * 2) * amplitude;
+      pathData += ` L ${currentX} ${waveY}`;
+    }
+    
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', pathData);
+    path.setAttribute('stroke', color);
+    path.setAttribute('stroke-width', String(thickness));
+    path.setAttribute('fill', 'none');
+    path.setAttribute('data-annotation-id', annotation.id);
+    path.setAttribute('data-annotation-type', annotation.type);
+    path.setAttribute('data-underline-style', 'wavy');
+    path.style.cursor = 'pointer';
+    
+    return path;
+  }
+  
+  /**
+   * 创建双线下划线
+   */
+  private createDoubleUnderline(annotation: Annotation, x: number, y: number, width: number, height: number, color: string, config: UnderlineConfig): SVGGElement {
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    const thickness = config.thickness || 2;
+    const spacing = config.spacing || 3;
+    
+    // 第一条线
+    const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line1.setAttribute('x1', String(x));
+    line1.setAttribute('y1', String(y + height));
+    line1.setAttribute('x2', String(x + width));
+    line1.setAttribute('y2', String(y + height));
+    line1.setAttribute('stroke', color);
+    line1.setAttribute('stroke-width', String(thickness));
+    
+    // 第二条线
+    const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line2.setAttribute('x1', String(x));
+    line2.setAttribute('y1', String(y + height + spacing));
+    line2.setAttribute('x2', String(x + width));
+    line2.setAttribute('y2', String(y + height + spacing));
+    line2.setAttribute('stroke', color);
+    line2.setAttribute('stroke-width', String(thickness));
+    
+    group.appendChild(line1);
+    group.appendChild(line2);
+    group.setAttribute('data-annotation-id', annotation.id);
+    group.setAttribute('data-annotation-type', annotation.type);
+    group.setAttribute('data-underline-style', 'double');
+    group.style.cursor = 'pointer';
+    
+    return group;
+  }
+  
+  /**
+   * 创建粗线下划线
+   */
+  private createThickUnderline(annotation: Annotation, x: number, y: number, width: number, height: number, color: string, config: UnderlineConfig): SVGRectElement {
+    const thickness = config.thickness || 4;
+    
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', String(x));
+    rect.setAttribute('y', String(y + height));
+    rect.setAttribute('width', String(width));
+    rect.setAttribute('height', String(thickness));
+    rect.setAttribute('fill', color);
+    rect.setAttribute('data-annotation-id', annotation.id);
+    rect.setAttribute('data-annotation-type', annotation.type);
+    rect.setAttribute('data-underline-style', 'thick');
+    rect.style.cursor = 'pointer';
+    
+    return rect;
+  }
+  
+  /**
+   * 创建自定义下划线
+   */
+  private createCustomUnderline(annotation: Annotation, x: number, y: number, width: number, height: number, color: string, config: UnderlineConfig): SVGElement {
+    // 默认创建波浪线作为自定义样式
+    return this.createWavyUnderline(annotation, x, y, width, height, color, {
+      ...config,
+      waveAmplitude: config.waveAmplitude || 4,
+      waveFrequency: config.waveFrequency || 0.15
+    });
   }
   
   /**
@@ -1224,6 +1393,11 @@ class AnnotationManagerImpl implements AnnotationManager {
       pageNumber: options?.pageNumber
     };
     
+    // 处理下划线样式配置
+    if (type === 'underline') {
+      annotation.underlineConfig = this.getDefaultUnderlineConfig(options?.underlineStyle);
+    }
+    
     this.annotations.push(annotation);
     this.saveAnnotations();
     
@@ -1231,6 +1405,23 @@ class AnnotationManagerImpl implements AnnotationManager {
     this.emit('created', annotation);
     
     return annotation;
+  }
+  
+  /**
+   * 获取默认下划线配置
+   */
+  private getDefaultUnderlineConfig(style: string = 'solid'): UnderlineConfig {
+    const configs: Record<string, UnderlineConfig> = {
+      solid: { style: 'solid', thickness: 2 },
+      dashed: { style: 'dashed', thickness: 2, dashPattern: '8,4' },
+      dotted: { style: 'dotted', thickness: 2 },
+      wavy: { style: 'wavy', thickness: 2, waveAmplitude: 3, waveFrequency: 0.1 },
+      double: { style: 'double', thickness: 2, spacing: 3 },
+      thick: { style: 'thick', thickness: 4 },
+      custom: { style: 'custom', thickness: 2, waveAmplitude: 4, waveFrequency: 0.15 }
+    };
+    
+    return configs[style] || configs.solid;
   }
   
   /**

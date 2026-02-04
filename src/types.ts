@@ -89,6 +89,27 @@ export interface CFICursorPosition {
 // 标记相关类型定义
 export type AnnotationType = 'highlight' | 'underline' | 'note' | 'bookmark';
 
+// 下划线样式类型
+export type UnderlineStyle = 
+  | 'solid'     // 实线
+  | 'dashed'    // 虚线
+  | 'dotted'    // 点线
+  | 'wavy'      // 波浪线
+  | 'double'    // 双线
+  | 'thick'     // 粗线
+  | 'custom';   // 自定义
+
+// 下划线配置
+export interface UnderlineConfig {
+  style: UnderlineStyle;
+  color?: string;
+  thickness?: number; // 线条粗细
+  waveAmplitude?: number; // 波浪振幅
+  waveFrequency?: number; // 波浪频率
+  dashPattern?: string;   // 虚线图案，如 "5,3"
+  spacing?: number;        // 双线间距
+}
+
 export interface Annotation {
   id: string;
   type: AnnotationType;
@@ -100,6 +121,8 @@ export interface Annotation {
   updatedAt: Date;
   chapterId: string;
   pageNumber?: number;
+  // 下划线专用配置
+  underlineConfig?: UnderlineConfig;
 }
 
 export interface AnnotationToolbarConfig {
