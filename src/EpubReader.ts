@@ -1838,9 +1838,29 @@ export class EpubReader {
       className?: string;
       onError?: (error: Error) => void;
       onSuccess?: () => void;
+      targetElementId?: string;
     }
   ): Promise<void> {
-    return this.renderChapter(chapterIndex, undefined, options);
+    console.log('🔍 [DEBUG] EpubReader.loadChapterByIndex 开始:', {
+      chapterIndex,
+      options,
+      targetElementId: options?.targetElementId || this.targetElementId,
+      hasInfo: !!this.info,
+      chaptersCount: this.info?.chapters?.length || 0
+    });
+
+    try {
+      const result = await this.renderChapter(chapterIndex, options?.targetElementId || this.targetElementId, options);
+      console.log('✅ [DEBUG] EpubReader.loadChapterByIndex 完成:', { chapterIndex });
+      return result;
+    } catch (error) {
+      console.error('❌ [DEBUG] EpubReader.loadChapterByIndex 失败:', {
+        chapterIndex,
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      throw error;
+    }
   }
 
   /**

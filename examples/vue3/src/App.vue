@@ -77,9 +77,6 @@
             @selection-change="onSelectionChange"
             ref="viewerRef"
           />
-          
-          <!-- 章节内容容器，始终存在但为空 -->
-          <div id="epub-viewer" class="chapter-render-area"></div>
         </div>
       </div>
     </main>

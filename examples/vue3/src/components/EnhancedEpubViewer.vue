@@ -33,7 +33,7 @@
         
         <select 
           v-model="currentChapterIndex" 
-          @change="loadChapterByIndex(currentChapterIndex)"
+          @change="handleChapterSelectorChange"
           class="chapter-selector"
         >
           <option 
@@ -83,7 +83,7 @@
 
     <!-- EPUB内容显示区域 -->
     <div 
-      id="epub-chapter-container" 
+      id="epub-viewer" 
       class="epub-content"
       @mouseup="handleTextSelection"
     >
@@ -119,7 +119,7 @@ import type {
 import MarkingToolbar from './MarkingToolbar.vue';
 
 interface Props {
-  epubReader: EpubReader;
+  reader: EpubReader;
   epubInfo: EpubInfoType | null;
   initialChapterIndex?: number;
   viewerElementId?: string;
@@ -179,36 +179,118 @@ const totalMarks = computed(() => marks.value.length);
 
 // 方法
 const loadChapterByIndex = async (index: number) => {
-  if (!props.epubReader || !chapters.value[index]) return;
+console.log('🔍 [DEBUG] loadChapterByIndex 开始:', { 
+    index, 
+    hasReader: !!props.reader, 
+    chaptersLength: chapters.value.length,
+    chapterExists: !!chapters.value[index],
+    currentChapterIndex: currentChapterIndex.value,
+    currentChapter: currentChapter.value?.title || currentChapter.value?.id
+  });
+  
+  if (!props.reader) {
+    console.error('❌ [DEBUG] EpubReader 不存在');
+    return;
+  }
+  
+  if (!chapters.value[index]) {
+    console.error('❌ [DEBUG] 章节不存在:', { 
+      index, 
+      chaptersLength: chapters.value.length,
+      availableChapters: chapters.value.map((ch, i) => ({ index: i, id: ch.id, href: ch.href }))
+    });
+    return;
+  }
   
   try {
     const chapter = chapters.value[index];
-    await props.epubReader.loadChapterByIndex(index, {
+console.log('📖 [DEBUG] 准备加载章节:', { 
+      index, 
+      chapterId: chapter.id, 
+      chapterHref: chapter.href,
+      chapterTitle: chapter.title || `第 ${index + 1} 章`,
       targetElementId: props.viewerElementId
     });
+    
+    await props.reader.loadChapterByIndex(index, {
+      targetElementId: props.viewerElementId
+    });
+    
+    await props.reader.loadChapterByIndex(index, {
+      targetElementId: props.viewerElementId
+    });
+    
+    console.log('✅ [DEBUG] EpubReader.loadChapterByIndex 完成，更新状态');
     
     currentChapter.value = chapter;
     currentChapterIndex.value = index;
     
+    console.log('🔄 [DEBUG] 状态已更新:', { 
+      newCurrentChapterIndex: currentChapterIndex.value,
+      newCurrentChapter: currentChapter.value?.title || currentChapter.value?.id,
+      chapterObjectMatch: currentChapter.value === chapter
+    });
+    
     // 更新当前章节的标记
     updateMarksForChapter();
     
+    console.log('📢 [DEBUG] 触发 chapter-change 事件');
     emit('chapter-change', chapter, index);
+    
+    console.log('🎉 [DEBUG] loadChapterByIndex 完成');
   } catch (error) {
-    console.error('加载章节失败:', error);
+    console.error('❌ [DEBUG] 加载章节失败:', error);
+    console.error('❌ [DEBUG] 错误详情:', {
+      index,
+      chapter: chapters.value[index],
+      errorType: error.constructor.name,
+      errorMessage: error.message,
+      errorStack: error.stack
+    });
   }
 };
 
 const previousChapter = () => {
+  console.log('⬅️ [DEBUG] previousChapter 被调用:', {
+    currentChapterIndex: currentChapterIndex.value,
+    hasPreviousChapter: hasPreviousChapter.value,
+    totalChapters: chapters.value.length
+  });
+  
   if (hasPreviousChapter.value) {
-    loadChapterByIndex(currentChapterIndex.value - 1);
+    const newIndex = currentChapterIndex.value - 1;
+    console.log('⬅️ [DEBUG] 准备加载上一章:', { newIndex });
+    loadChapterByIndex(newIndex);
+  } else {
+    console.log('⚠️ [DEBUG] 没有上一章可加载');
   }
 };
 
 const nextChapter = () => {
+  console.log('➡️ [DEBUG] nextChapter 被调用:', {
+    currentChapterIndex: currentChapterIndex.value,
+    hasNextChapter: hasNextChapter.value,
+    totalChapters: chapters.value.length
+  });
+  
   if (hasNextChapter.value) {
-    loadChapterByIndex(currentChapterIndex.value + 1);
+    const newIndex = currentChapterIndex.value + 1;
+    console.log('➡️ [DEBUG] 准备加载下一章:', { newIndex });
+    loadChapterByIndex(newIndex);
+  } else {
+    console.log('⚠️ [DEBUG] 没有下一章可加载');
   }
+};
+
+const handleChapterSelectorChange = () => {
+  console.log('📋 [DEBUG] 章节选择器变化:', {
+    newIndex: currentChapterIndex.value,
+    oldIndex: currentChapter.value ? chapters.value.findIndex(ch => ch.id === currentChapter.value.id) : -1,
+    chaptersLength: chapters.value.length,
+    selectedChapter: chapters.value[currentChapterIndex.value]?.title || chapters.value[currentChapterIndex.value]?.id
+  });
+  
+  loadChapterByIndex(currentChapterIndex.value);
 };
 
 // 初始化SVG标记管理器
@@ -306,8 +388,13 @@ const handleMarkClick = (event: CustomEvent) => {
 // 更新当前章节的标记
 const updateMarksForChapter = () => {
   if (svgMarkManager && currentChapter.value) {
+    console.log('🔍 [DEBUG] updateMarksForChapter:', {
+      chapterHref: currentChapter.value.href,
+      chapterTitle: currentChapter.value.title
+    });
     const chapterMarks = svgMarkManager.getMarksByChapter(currentChapter.value.href);
     marks.value = chapterMarks;
+    console.log('📝 [DEBUG] 更新章节标记:', { marksCount: chapterMarks.length });
   }
 };
 
@@ -402,11 +489,45 @@ onUnmounted(() => {
 });
 
 // 监听章节变化
-watch(() => props.epubInfo, (newInfo) => {
+watch(() => props.epubInfo, (newInfo, oldInfo) => {
+  console.log('👀 [DEBUG] epubInfo 发生变化:', {
+    hasNewInfo: !!newInfo,
+    newChaptersCount: newInfo?.chapters?.length || 0,
+    oldChaptersCount: oldInfo?.chapters?.length || 0,
+    currentChapterIndex: currentChapterIndex.value,
+    immediateLoad: newInfo && newInfo.chapters.length > 0
+  });
+  
   if (newInfo && newInfo.chapters.length > 0) {
+    console.log('🚀 [DEBUG] epubInfo 变化，自动加载章节:', { 
+      index: currentChapterIndex.value,
+      chapterTitle: newInfo.chapters[currentChapterIndex.value]?.title || newInfo.chapters[currentChapterIndex.value]?.id
+    });
     loadChapterByIndex(currentChapterIndex.value);
   }
 }, { immediate: true });
+
+// 监听当前章节索引变化
+watch(currentChapterIndex, (newIndex, oldIndex) => {
+  console.log('🔄 [DEBUG] currentChapterIndex 变化:', {
+    newIndex,
+    oldIndex,
+    newChapter: chapters.value[newIndex]?.title || chapters.value[newIndex]?.id,
+    oldChapter: chapters.value[oldIndex]?.title || chapters.value[oldIndex]?.id,
+    isChangingByUserAction: newIndex !== oldIndex
+  });
+});
+
+// 监听当前章节对象变化
+watch(currentChapter, (newChapter, oldChapter) => {
+  console.log('📖 [DEBUG] currentChapter 变化:', {
+    newChapterId: newChapter?.id,
+    newChapterTitle: newChapter?.title,
+    oldChapterId: oldChapter?.id,
+    oldChapterTitle: oldChapter?.title,
+    isDifferentChapter: newChapter?.id !== oldChapter?.id
+  });
+});
 
 // 暴露方法给父组件
 defineExpose({
