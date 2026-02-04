@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EPUB标记功能测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+        
+        .control-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 5px;
+        }
+        
+        .control-btn:hover {
+            background: #0056b3;
+        }
+        
+        .control-btn.active {
+            background: #28a745;
+        }
+        
+        #epub-container {
+            min-height: 400px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            padding: 20px;
+            position: relative;
+            line-height: 1.8;
+            font-size: 16px;
+        }
+        
+        .annotation-toolbar {
+            display: none;
+            position: fixed;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 8px;
+            gap: 4px;
+            z-index: 10000;
+        }
+        
+        .tool-btn {
+            padding: 8px 12px;
+            border: none;
+            background: transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        
+        .tool-btn:hover {
+            background: #f0f0f0;
+        }
+        
+        .info-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e8f5e8;
+            border-radius: 6px;
+            border-left: 4px solid #28a745;
+        }
+        
+        .annotation-list {
+            margin-top: 15px;
+        }
+        
+        .annotation-item {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+        
+        .annotation-type {
+            font-weight: bold;
+            color: #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📚 EPUB标记功能测试</h1>
+        
+        <div class="controls">
+            <button id="toggle-annotations" class="control-btn">📝 启用标记功能</button>
+            <button id="show-annotations" class="control-btn">📋 显示标记列表</button>
+            <button id="export-annotations" class="control-btn">💾 导出标记</button>
+            <button id="import-annotations" class="control-btn">📂 导入标记</button>
+            <button id="clear-annotations" class="control-btn">🗑️ 清空标记</button>
+        </div>
+        
+        <div id="epub-container">
+            <h2>第一章：测试章节</h2>
+            <p>这是一段用于测试标记功能的示例文本。你可以选择这段文字中的任意部分来创建不同类型的标记。</p>
+            
+            <p><strong>高亮测试：</strong>选择这段文字然后点击高亮按钮，它会以黄色背景高亮显示。高亮功能非常适合标记重要段落或关键信息。</p>
+            
+            <p><strong>下划线测试：</strong>选择这段文字点击下划线按钮，会在文字下方添加蓝色下划线。下划线常用于标记需要特别注意的内容。</p>
+            
+            <p><strong>笔记测试：</strong>选择这段文字点击笔记按钮，可以为选中的文字添加个人笔记。笔记功能帮助你记录想法和理解。</p>
+            
+            <p><strong>书签测试：</strong>选择这段文字点击书签按钮，可以创建一个橙色书签标记。书签功能用于快速定位重要位置。</p>
+            
+            <h3>功能说明</h3>
+            <ul>
+                <li>选择任意文字后会自动显示标记工具栏</li>
+                <li>工具栏会在3秒后自动隐藏</li>
+                <li>所有标记都会保存到浏览器本地存储</li>
+                <li>支持导出和导入标记数据</li>
+                <li>标记基于CFI标准精确定位</li>
+            </ul>
+        </div>
+        
+        <div id="annotation-toolbar" class="annotation-toolbar">
+            <button class="tool-btn" data-action="highlight">🟨 高亮</button>
+            <button class="tool-btn" data-action="underline">U̲ 下划线</button>
+            <button class="tool-btn" data-action="note">📝 笔记</button>
+            <button class="tool-btn" data-action="bookmark">🔖 书签</button>
+        </div>
+        
+        <div class="info-panel">
+            <h3>ℹ️ 使用说明</h3>
+            <ol>
+                <li>点击"📝 启用标记功能"按钮激活标记系统</li>
+                <li>在上方文本区域选择任意文字</li>
+                <li>从弹出的工具栏选择标记类型</li>
+                <li>使用"📋 显示标记列表"查看所有标记</li>
+                <li>使用"💾 导出标记"保存标记数据</li>
+            </ol>
+            
+            <div id="annotation-stats" class="annotation-stats">
+                <strong>统计信息：</strong>
+                <span id="stats">暂无标记数据</span>
+            </div>
+        </div>
+        
+        <div id="annotation-list" class="annotation-list" style="display: none;">
+            <h3>📋 标记列表</h3>
+            <div id="annotation-items"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        // 注意：这里需要使用实际的构建版本
+        // import { EpubReader } from '../dist/index.js';
+        
+        // 模拟标记管理器（实际使用时会使用真实的EpubReader）
+        class MockAnnotationManager {
+            constructor() {
+                this.annotations = JSON.parse(localStorage.getItem('test-annotations') || '[]');
+            }
+            
+            async createAnnotation(type, text, options = {}) {
+                const annotation = {
+                    id: 'ann_' + Date.now(),
+                    type,
+                    text,
+                    color: options.color || this.getDefaultColor(type),
+                    note: options.note,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    chapterId: 'test-chapter'
+                };
+                
+                this.annotations.push(annotation);
+                this.save();
+                return annotation;
+            }
+            
+            async removeAnnotation(id) {
+                const index = this.annotations.findIndex(ann => ann.id === id);
+                if (index !== -1) {
+                    this.annotations.splice(index, 1);
+                    this.save();
+                }
+            }
+            
+            getAnnotations(chapterId) {
+                if (!chapterId) return this.annotations;
+                return this.annotations.filter(ann => ann.chapterId === chapterId);
+            }
+            
+            exportAnnotations() {
+                return JSON.stringify(this.annotations, null, 2);
+            }
+            
+            async importAnnotations(data, merge = false) {
+                const imported = JSON.parse(data);
+                this.annotations = merge ? [...this.annotations, ...imported] : imported;
+                this.save();
+            }
+            
+            save() {
+                localStorage.setItem('test-annotations', JSON.stringify(this.annotations));
+            }
+            
+            getDefaultColor(type) {
+                const colors = {
+                    highlight: '#ffeb3b',
+                    underline: '#2196f3',
+                    note: '#4caf50',
+                    bookmark: '#ff9800'
+                };
+                return colors[type] || '#ffeb3b';
+            }
+            
+            getStats() {
+                const stats = {
+                    total: this.annotations.length,
+                    highlight: this.annotations.filter(ann => ann.type === 'highlight').length,
+                    underline: this.annotations.filter(ann => ann.type === 'underline').length,
+                    note: this.annotations.filter(ann => ann.type === 'note').length,
+                    bookmark: this.annotations.filter(ann => ann.type === 'bookmark').length
+                };
+                return stats;
+            }
+        }
+        
+        // 初始化
+        let annotationsEnabled = false;
+        let annotationManager = new MockAnnotationManager();
+        
+        const container = document.getElementById('epub-container');
+        const toolbar = document.getElementById('annotation-toolbar');
+        const toggleBtn = document.getElementById('toggle-annotations');
+        const showBtn = document.getElementById('show-annotations');
+        const exportBtn = document.getElementById('export-annotations');
+        const importBtn = document.getElementById('import-annotations');
+        const clearBtn = document.getElementById('clear-annotations');
+        const annotationList = document.getElementById('annotation-list');
+        const annotationItems = document.getElementById('annotation-items');
+        const stats = document.getElementById('stats');
+        
+        // 更新统计信息
+        function updateStats() {
+            const data = annotationManager.getStats();
+            stats.innerHTML = `
+                总计: ${data.total} 个标记 | 
+                🟨 高亮: ${data.highlight} | 
+                U̲ 下划线: ${data.underline} | 
+                📝 笔记: ${data.note} | 
+                🔖 书签: ${data.bookmark}
+            `;
+        }
+        
+        // 更新标记列表显示
+        function updateAnnotationList() {
+            const annotations = annotationManager.getAnnotations();
+            
+            if (annotations.length === 0) {
+                annotationItems.innerHTML = '<p style="color: #666; font-style: italic;">暂无标记</p>';
+            } else {
+                annotationItems.innerHTML = annotations.map(ann => `
+                    <div class="annotation-item">
+                        <div class="annotation-type">${getAnnotationIcon(ann.type)} ${getAnnotationTypeName(ann.type)}</div>
+                        <div style="margin: 5px 0;">${ann.text}</div>
+                        ${ann.note ? `<div style="background: #e8f5e8; padding: 5px; border-radius: 3px; margin: 5px 0;">📝 ${ann.note}</div>` : ''}
+                        <button onclick="removeAnnotation('${ann.id}')" style="background: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 12px;">删除</button>
+                    </div>
+                `).join('');
+            }
+            
+            updateStats();
+        }
+        
+        function getAnnotationIcon(type) {
+            const icons = {
+                highlight: '🟨',
+                underline: 'U̲',
+                note: '📝',
+                bookmark: '🔖'
+            };
+            return icons[type] || '📌';
+        }
+        
+        function getAnnotationTypeName(type) {
+            const names = {
+                highlight: '高亮',
+                underline: '下划线',
+                note: '笔记',
+                bookmark: '书签'
+            };
+            return names[type] || '未知';
+        }
+        
+        window.removeAnnotation = async function(id) {
+            await annotationManager.removeAnnotation(id);
+            updateAnnotationList();
+        };
+        
+        // 切换标记功能
+        toggleBtn.addEventListener('click', () => {
+            annotationsEnabled = !annotationsEnabled;
+            toggleBtn.textContent = annotationsEnabled ? '📝 禁用标记功能' : '📝 启用标记功能';
+            toggleBtn.classList.toggle('active', annotationsEnabled);
+            
+            if (annotationsEnabled) {
+                setupTextSelection();
+            }
+        });
+        
+        // 设置文字选择监听
+        function setupTextSelection() {
+            container.addEventListener('mouseup', handleTextSelection);
+            container.addEventListener('touchend', handleTextSelection);
+            document.addEventListener('selectionchange', handleSelectionChange);
+        }
+        
+        function handleTextSelection() {
+            setTimeout(() => {
+                const selection = window.getSelection();
+                if (!selection || selection.isCollapsed) {
+                    hideToolbar();
+                    return;
+                }
+                
+                const selectedText = selection.toString().trim();
+                if (selectedText.length < 1) {
+                    hideToolbar();
+                    return;
+                }
+                
+                showToolbar(selection);
+            }, 10);
+        }
+        
+        function handleSelectionChange() {
+            const selection = window.getSelection();
+            if (!selection || selection.isCollapsed) {
+                hideToolbar();
+            }
+        }
+        
+        function showToolbar(selection) {
+            const range = selection.getRangeAt(0);
+            const rect = range.getBoundingClientRect();
+            
+            let left = rect.left + window.scrollX;
+            let top = rect.bottom + window.scrollY + 5;
+            
+            // 防止超出视窗
+            if (left + 200 > window.innerWidth) {
+                left = window.innerWidth - 210;
+            }
+            
+            if (top + 60 > window.innerHeight + window.scrollY) {
+                top = rect.top + window.scrollY - 65;
+            }
+            
+            toolbar.style.left = left + 'px';
+            toolbar.style.top = top + 'px';
+            toolbar.style.display = 'flex';
+            toolbar.style.opacity = '0';
+            
+            setTimeout(() => {
+                toolbar.style.opacity = '1';
+            }, 10);
+            
+            // 3秒后自动隐藏
+            setTimeout(hideToolbar, 3000);
+        }
+        
+        function hideToolbar() {
+            toolbar.style.opacity = '0';
+            setTimeout(() => {
+                toolbar.style.display = 'none';
+            }, 200);
+        }
+        
+        // 工具栏按钮事件
+        toolbar.addEventListener('click', async (e) => {
+            if (e.target.classList.contains('tool-btn')) {
+                const action = e.target.getAttribute('data-action');
+                const selection = window.getSelection();
+                
+                if (!selection || selection.isCollapsed) return;
+                
+                const selectedText = selection.toString().trim();
+                if (!selectedText) return;
+                
+                try {
+                    let options = {};
+                    
+                    if (action === 'note') {
+                        const note = prompt('请输入笔记内容：');
+                        if (!note) return;
+                        options = { note };
+                    }
+                    
+                    await annotationManager.createAnnotation(action, selectedText, options);
+                    
+                    // 清除选择
+                    selection.removeAllRanges();
+                    hideToolbar();
+                    
+                    updateAnnotationList();
+                    
+                } catch (error) {
+                    console.error('创建标记失败:', error);
+                    alert('创建标记失败: ' + error.message);
+                }
+            }
+        });
+        
+        // 显示标记列表
+        showBtn.addEventListener('click', () => {
+            const isHidden = annotationList.style.display === 'none';
+            annotationList.style.display = isHidden ? 'block' : 'none';
+            if (isHidden) {
+                updateAnnotationList();
+            }
+        });
+        
+        // 导出标记
+        exportBtn.addEventListener('click', () => {
+            try {
+                const data = annotationManager.exportAnnotations();
+                const blob = new Blob([data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `epub-annotations-${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                console.error('导出失败:', error);
+                alert('导出失败: ' + error.message);
+            }
+        });
+        
+        // 导入标记
+        importBtn.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            
+            input.onchange = async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                try {
+                    const text = await file.text();
+                    const merge = confirm('是否与现有标记合并？(点击"确定"合并，点击"取消"替换)');
+                    
+                    await annotationManager.importAnnotations(text, merge);
+                    updateAnnotationList();
+                    
+                    alert('标记导入成功！');
+                } catch (error) {
+                    console.error('导入失败:', error);
+                    alert('导入失败: ' + error.message);
+                }
+            };
+            
+            input.click();
+        });
+        
+        // 清空标记
+        clearBtn.addEventListener('click', () => {
+            if (confirm('确定要清空所有标记吗？此操作不可恢复！')) {
+                annotationManager = new MockAnnotationManager();
+                annotationManager.save(); // 保存空列表
+                updateAnnotationList();
+                alert('所有标记已清空！');
+            }
+        });
+        
+        // 初始化显示
+        updateStats();
+    </script>
+</body>
+</html>

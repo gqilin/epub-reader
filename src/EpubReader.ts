@@ -12,6 +12,10 @@ import {
   CFIPathComponent,
   CFIJumpOptions,
   CFICursorPosition,
+  Annotation,
+  AnnotationType,
+  AnnotationManager,
+  AnnotationOptions,
 } from './types';
 
 // XML解析器包装器 - 处理浏览器兼容性
@@ -305,6 +309,1017 @@ class CFIHighlighter {
   }
 }
 
+// SVG覆盖层管理器
+class SVGOverlayManager {
+  private svgElement: SVGElement | null = null;
+  private containerElement: HTMLElement | null = null;
+  private annotations: Map<string, SVGElement[]> = new Map();
+  
+  /**
+   * 创建SVG覆盖层
+   */
+  createOverlay(containerId: string): void {
+    const container = document.getElementById(containerId);
+    if (!container) {
+      console.warn(`容器元素不存在: ${containerId}`);
+      return;
+    }
+    
+    this.containerElement = container;
+    
+    // 检查是否已存在SVG覆盖层
+    const existingSvg = container.querySelector('.epub-annotation-overlay');
+    if (existingSvg) {
+      this.svgElement = existingSvg as SVGElement;
+      return;
+    }
+    
+    // 创建SVG元素
+    this.svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    this.svgElement.classList.add('epub-annotation-overlay');
+    this.svgElement.setAttribute('style', `
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1000;
+      overflow: visible;
+    `);
+    
+    // 设置容器为相对定位
+    const containerStyle = window.getComputedStyle(container);
+    if (containerStyle.position === 'static') {
+      container.style.position = 'relative';
+    }
+    
+    container.appendChild(this.svgElement);
+  }
+  
+  /**
+   * 渲染标记到SVG
+   */
+  renderAnnotation(annotation: Annotation): void {
+    if (!this.svgElement || !this.containerElement) return;
+    
+    // 移除已存在的标记
+    this.removeAnnotation(annotation.id);
+    
+    try {
+      const range = this.getRangeFromCFI(annotation.cfi);
+      if (!range) {
+        console.warn('无法从CFI获取Range:', annotation.cfi);
+        return;
+      }
+      
+      const rects = range.getClientRects();
+      const containerRect = this.containerElement.getBoundingClientRect();
+      const elements: SVGElement[] = [];
+      
+      Array.from(rects).forEach(rect => {
+        if (rect.width > 0 && rect.height > 0) {
+          const element = this.createAnnotationElement(annotation, rect, containerRect);
+          if (element) {
+            elements.push(element);
+            this.svgElement!.appendChild(element);
+          }
+        }
+      });
+      
+      this.annotations.set(annotation.id, elements);
+    } catch (error) {
+      console.error('渲染标记失败:', error);
+    }
+  }
+  
+  /**
+   * 创建标记元素
+   */
+  private createAnnotationElement(annotation: Annotation, rect: DOMRect, containerRect: DOMRect): SVGElement | null {
+    const x = rect.left - containerRect.left;
+    const y = rect.top - containerRect.top;
+    const width = rect.width;
+    const height = rect.height;
+    
+    switch (annotation.type) {
+      case 'highlight':
+        return this.createHighlight(annotation, x, y, width, height);
+      case 'underline':
+        return this.createUnderline(annotation, x, y, width, height);
+      case 'note':
+        return this.createNoteMarker(annotation, x, y, width, height);
+      case 'bookmark':
+        return this.createBookmarkMarker(annotation, x, y, width, height);
+      default:
+        return null;
+    }
+  }
+  
+  /**
+   * 创建高亮标记
+   */
+  private createHighlight(annotation: Annotation, x: number, y: number, width: number, height: number): SVGRectElement {
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', String(x));
+    rect.setAttribute('y', String(y));
+    rect.setAttribute('width', String(width));
+    rect.setAttribute('height', String(height));
+    rect.setAttribute('fill', annotation.color || '#ffeb3b');
+    rect.setAttribute('fill-opacity', '0.3');
+    rect.setAttribute('data-annotation-id', annotation.id);
+    rect.setAttribute('data-annotation-type', annotation.type);
+    rect.style.cursor = 'pointer';
+    
+    return rect;
+  }
+  
+  /**
+   * 创建下划线标记
+   */
+  private createUnderline(annotation: Annotation, x: number, y: number, width: number, height: number): SVGLineElement {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', String(x));
+    line.setAttribute('y1', String(y + height));
+    line.setAttribute('x2', String(x + width));
+    line.setAttribute('y2', String(y + height));
+    line.setAttribute('stroke', annotation.color || '#2196f3');
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('data-annotation-id', annotation.id);
+    line.setAttribute('data-annotation-type', annotation.type);
+    line.style.cursor = 'pointer';
+    
+    return line;
+  }
+  
+  /**
+   * 创建笔记标记
+   */
+  private createNoteMarker(annotation: Annotation, x: number, y: number, width: number, height: number): SVGElement {
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    group.setAttribute('data-annotation-id', annotation.id);
+    group.setAttribute('data-annotation-type', annotation.type);
+    
+    // 背景
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bg.setAttribute('x', String(x));
+    bg.setAttribute('y', String(y));
+    bg.setAttribute('width', String(width));
+    bg.setAttribute('height', String(height));
+    bg.setAttribute('fill', '#4caf50');
+    bg.setAttribute('fill-opacity', '0.2');
+    
+    // 图标
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', String(x + width / 2));
+    text.setAttribute('y', String(y + height / 2));
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('dominant-baseline', 'middle');
+    text.setAttribute('font-size', '12');
+    text.setAttribute('fill', '#4caf50');
+    text.textContent = '📝';
+    
+    group.appendChild(bg);
+    group.appendChild(text);
+    group.style.cursor = 'pointer';
+    
+    return group;
+  }
+  
+  /**
+   * 创建书签标记
+   */
+  private createBookmarkMarker(annotation: Annotation, x: number, y: number, width: number, height: number): SVGElement {
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    group.setAttribute('data-annotation-id', annotation.id);
+    group.setAttribute('data-annotation-type', annotation.type);
+    
+    // 书签图标
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const pathData = `M ${x + width/2 - 6} ${y + 2} 
+                     L ${x + width/2 + 6} ${y + 2} 
+                     L ${x + width/2 + 6} ${y + height - 4} 
+                     L ${x + width/2} ${y + height - 8} 
+                     L ${x + width/2 - 6} ${y + height - 4} Z`;
+    path.setAttribute('d', pathData);
+    path.setAttribute('fill', '#ff9800');
+    path.setAttribute('stroke', '#f57c00');
+    path.setAttribute('stroke-width', '1');
+    
+    group.appendChild(path);
+    group.style.cursor = 'pointer';
+    
+    return group;
+  }
+  
+  /**
+   * 移除指定标记
+   */
+  removeAnnotation(annotationId: string): void {
+    const elements = this.annotations.get(annotationId);
+    if (elements) {
+      elements.forEach(element => {
+        if (element.parentNode) {
+          element.parentNode.removeChild(element);
+        }
+      });
+      this.annotations.delete(annotationId);
+    }
+  }
+  
+  /**
+   * 清除所有标记
+   */
+  clearAnnotations(): void {
+    this.annotations.forEach(elements => {
+      elements.forEach(element => {
+        if (element.parentNode) {
+          element.parentNode.removeChild(element);
+        }
+      });
+    });
+    this.annotations.clear();
+  }
+  
+  /**
+   * 从CFI获取Range
+   */
+  private getRangeFromCFI(cfi: CFI): Range | null {
+    try {
+      const container = this.containerElement;
+      if (!container) return null;
+      
+      // 查找CFI对应的元素
+      const elements = container.querySelectorAll('[data-cfi]');
+      for (let i = 0; i < elements.length; i++) {
+        const element = elements[i];
+        const elementCFI = element.getAttribute('data-cfi');
+        if (elementCFI === cfi.path) {
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          return range;
+        }
+      }
+      
+      // 如果没有找到data-cfi属性，尝试通过文本内容匹配
+      return this.findRangeByTextContent(cfi);
+    } catch (error) {
+      console.error('从CFI获取Range失败:', error);
+      return null;
+    }
+  }
+  
+  /**
+   * 通过文本内容查找Range
+   */
+  private findRangeByTextContent(cfi: CFI): Range | null {
+    const container = this.containerElement;
+    if (!container || !cfi.localPath) return null;
+    
+    // 从localPath提取文本内容用于匹配
+    const textContent = cfi.localPath.replace(/[?!&=]/g, '');
+    if (!textContent) return null;
+    
+    const walker = document.createTreeWalker(
+      container,
+      NodeFilter.SHOW_TEXT,
+      null
+    );
+    
+    let node;
+    while (node = walker.nextNode()) {
+      const text = node.textContent || '';
+      if (text.includes(textContent)) {
+        const range = document.createRange();
+        const startIndex = text.indexOf(textContent);
+        range.setStart(node as Text, startIndex);
+        range.setEnd(node as Text, startIndex + textContent.length);
+        return range;
+      }
+    }
+    
+    return null;
+  }
+  
+  /**
+   * 获取指定位置的标记元素
+   */
+  getAnnotationAtPoint(x: number, y: number): string | null {
+    if (!this.svgElement) return null;
+    
+    // 使用document的elementsFromPoint方法
+    const elements = document.elementsFromPoint(x, y);
+    
+    for (const element of elements) {
+      const annotationId = element.getAttribute('data-annotation-id');
+      if (annotationId) {
+        return annotationId;
+      }
+    }
+    
+    return null;
+  }
+  
+  /**
+   * 更新标记样式
+   */
+  updateAnnotationStyle(annotationId: string, styles: { color?: string; opacity?: number }): void {
+    const elements = this.annotations.get(annotationId);
+    if (!elements) return;
+    
+    elements.forEach(element => {
+      if (styles.color) {
+        if (element.tagName === 'rect') {
+          element.setAttribute('fill', styles.color);
+        } else if (element.tagName === 'line') {
+          element.setAttribute('stroke', styles.color);
+        }
+      }
+      
+      if (styles.opacity !== undefined) {
+        if (element.tagName === 'rect') {
+          element.setAttribute('fill-opacity', String(styles.opacity));
+        } else if (element.tagName === 'line') {
+          element.setAttribute('stroke-opacity', String(styles.opacity));
+        }
+      }
+    });
+  }
+}
+
+// 文字选择管理器
+class TextSelectionManager {
+  private toolbarElement: HTMLElement | null = null;
+  private containerElement: HTMLElement | null = null;
+  private currentSelection: Selection | null = null;
+  private autoHideTimer: number | null = null;
+  private selectionCallback: ((selection: Selection) => void) | null = null;
+  
+  /**
+   * 设置选择监听器
+   */
+  setupSelectionListener(
+    containerId: string, 
+    toolbarId: string,
+    onSelection?: (selection: Selection) => void
+  ): void {
+    const container = document.getElementById(containerId);
+    const toolbar = document.getElementById(toolbarId);
+    
+    if (!container) {
+      console.warn(`容器元素不存在: ${containerId}`);
+      return;
+    }
+    
+    this.containerElement = container;
+    this.toolbarElement = toolbar;
+    this.selectionCallback = onSelection || null;
+    
+    // 监听鼠标选择事件
+    container.addEventListener('mouseup', this.handleMouseUp.bind(this));
+    container.addEventListener('touchend', this.handleTouchEnd.bind(this));
+    
+    // 监听选择变化事件
+    document.addEventListener('selectionchange', this.handleSelectionChange.bind(this));
+    
+    // 隐藏工具栏当点击其他地方时
+    document.addEventListener('mousedown', this.handleDocumentMouseDown.bind(this));
+  }
+  
+  /**
+   * 处理鼠标松开事件
+   */
+  private handleMouseUp(event: MouseEvent): void {
+    // 延迟执行以确保选择已经完成
+    setTimeout(() => {
+      this.handleTextSelection();
+    }, 10);
+  }
+  
+  /**
+   * 处理触摸结束事件
+   */
+  private handleTouchEnd(event: TouchEvent): void {
+    setTimeout(() => {
+      this.handleTextSelection();
+    }, 10);
+  }
+  
+  /**
+   * 处理选择变化事件
+   */
+  private handleSelectionChange(): void {
+    // 只在容器内选择时处理
+    if (this.isSelectionInContainer()) {
+      this.handleTextSelection();
+    }
+  }
+  
+  /**
+   * 处理文档点击事件
+   */
+  private handleDocumentMouseDown(event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+    
+    // 如果点击的不是工具栏或容器，隐藏工具栏
+    if (!this.isElementInToolbar(target) && !this.isElementInContainer(target)) {
+      this.hideToolbar();
+    }
+  }
+  
+  /**
+   * 处理文字选择
+   */
+  private handleTextSelection(): void {
+    const selection = window.getSelection();
+    
+    if (!selection || selection.isCollapsed) {
+      this.hideToolbar();
+      return;
+    }
+    
+    const selectedText = selection.toString().trim();
+    
+    // 如果选中的文字太短，隐藏工具栏
+    if (selectedText.length < 1) {
+      this.hideToolbar();
+      return;
+    }
+    
+    // 确保选择在容器内
+    if (!this.isSelectionInContainer()) {
+      this.hideToolbar();
+      return;
+    }
+    
+    this.currentSelection = selection;
+    this.showToolbar(selection);
+    
+    // 触发选择回调
+    if (this.selectionCallback) {
+      this.selectionCallback(selection);
+    }
+  }
+  
+  /**
+   * 检查选择是否在容器内
+   */
+  private isSelectionInContainer(): boolean {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return false;
+    
+    const range = selection.getRangeAt(0);
+    const container = this.containerElement;
+    
+    if (!container) return false;
+    
+    // 检查选择范围是否与容器相交
+    return container.contains(range.commonAncestorContainer) || 
+           container.contains(range.startContainer) || 
+           container.contains(range.endContainer);
+  }
+  
+  /**
+   * 检查元素是否在工具栏内
+   */
+  private isElementInToolbar(element: HTMLElement): boolean {
+    if (!this.toolbarElement) return false;
+    return this.toolbarElement.contains(element) || element === this.toolbarElement;
+  }
+  
+  /**
+   * 检查元素是否在容器内
+   */
+  private isElementInContainer(element: HTMLElement): boolean {
+    if (!this.containerElement) return false;
+    return this.containerElement.contains(element) || element === this.containerElement;
+  }
+  
+  /**
+   * 显示工具栏
+   */
+  private showToolbar(selection: Selection): void {
+    if (!this.toolbarElement || !this.containerElement) return;
+    
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    const containerRect = this.containerElement.getBoundingClientRect();
+    
+    // 计算工具栏位置
+    let toolbarLeft = rect.left + window.scrollX;
+    let toolbarTop = rect.bottom + window.scrollY + 5;
+    
+    // 防止工具栏超出视窗
+    const toolbarRect = this.toolbarElement.getBoundingClientRect();
+    if (toolbarLeft + toolbarRect.width > window.innerWidth) {
+      toolbarLeft = window.innerWidth - toolbarRect.width - 10;
+    }
+    
+    if (toolbarTop + toolbarRect.height > window.innerHeight + window.scrollY) {
+      // 如果下方空间不够，显示在选中文本上方
+      toolbarTop = rect.top + window.scrollY - toolbarRect.height - 5;
+    }
+    
+    // 设置工具栏位置和显示
+    this.toolbarElement.style.position = 'fixed';
+    this.toolbarElement.style.left = `${toolbarLeft}px`;
+    this.toolbarElement.style.top = `${toolbarTop}px`;
+    this.toolbarElement.style.display = 'flex';
+    this.toolbarElement.style.zIndex = '10000';
+    this.toolbarElement.style.opacity = '0';
+    
+    // 添加淡入动画
+    setTimeout(() => {
+      if (this.toolbarElement) {
+        this.toolbarElement.style.transition = 'opacity 0.2s ease';
+        this.toolbarElement.style.opacity = '1';
+      }
+    }, 10);
+    
+    // 设置自动隐藏
+    this.setAutoHide();
+  }
+  
+  /**
+   * 隐藏工具栏
+   */
+  hideToolbar(): void {
+    if (!this.toolbarElement) return;
+    
+    // 清除自动隐藏定时器
+    if (this.autoHideTimer) {
+      clearTimeout(this.autoHideTimer);
+      this.autoHideTimer = null;
+    }
+    
+    // 添加淡出动画
+    this.toolbarElement.style.transition = 'opacity 0.2s ease';
+    this.toolbarElement.style.opacity = '0';
+    
+    setTimeout(() => {
+      if (this.toolbarElement) {
+        this.toolbarElement.style.display = 'none';
+      }
+    }, 200);
+  }
+  
+  /**
+   * 设置自动隐藏
+   */
+  private setAutoHide(): void {
+    if (this.autoHideTimer) {
+      clearTimeout(this.autoHideTimer);
+    }
+    
+    this.autoHideTimer = window.setTimeout(() => {
+      this.hideToolbar();
+    }, 3000); // 3秒后自动隐藏
+  }
+  
+  /**
+   * 获取当前选择
+   */
+  getCurrentSelection(): Selection | null {
+    return this.currentSelection;
+  }
+  
+  /**
+   * 获取选中的文字
+   */
+  getSelectedText(): string {
+    const selection = this.getCurrentSelection();
+    return selection ? selection.toString().trim() : '';
+  }
+  
+  /**
+   * 清除选择
+   */
+  clearSelection(): void {
+    const selection = window.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+    }
+    this.currentSelection = null;
+    this.hideToolbar();
+  }
+  
+  /**
+   * 获取选择的范围
+   */
+  getSelectedRange(): Range | null {
+    const selection = this.getCurrentSelection();
+    return selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+  }
+  
+  /**
+   * 检查是否有选中的内容
+   */
+  hasSelection(): boolean {
+    const selection = window.getSelection();
+    return selection ? !selection.isCollapsed && selection.toString().trim().length > 0 : false;
+  }
+  
+  /**
+   * 销毁选择管理器
+   */
+  destroy(): void {
+    if (this.containerElement) {
+      this.containerElement.removeEventListener('mouseup', this.handleMouseUp);
+      this.containerElement.removeEventListener('touchend', this.handleTouchEnd);
+    }
+    
+    document.removeEventListener('selectionchange', this.handleSelectionChange);
+    document.removeEventListener('mousedown', this.handleDocumentMouseDown);
+    
+    if (this.autoHideTimer) {
+      clearTimeout(this.autoHideTimer);
+    }
+    
+    this.containerElement = null;
+    this.toolbarElement = null;
+    this.currentSelection = null;
+    this.selectionCallback = null;
+  }
+}
+
+// 标记存储管理器
+class AnnotationStorage {
+  private readonly STORAGE_KEY = 'epub-annotations';
+  private readonly STORAGE_VERSION = '1.0';
+  
+  /**
+   * 保存标记数据
+   */
+  saveAnnotations(annotations: Annotation[]): void {
+    try {
+      const data = {
+        version: this.STORAGE_VERSION,
+        timestamp: new Date().toISOString(),
+        annotations: annotations.map(ann => ({
+          ...ann,
+          createdAt: ann.createdAt.toISOString(),
+          updatedAt: ann.updatedAt.toISOString()
+        }))
+      };
+      
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data, null, 2));
+    } catch (error) {
+      console.error('保存标记失败:', error);
+    }
+  }
+  
+  /**
+   * 加载标记数据
+   */
+  loadAnnotations(): Annotation[] {
+    try {
+      const data = localStorage.getItem(this.STORAGE_KEY);
+      if (!data) return [];
+      
+      const parsed = JSON.parse(data);
+      
+      // 检查版本兼容性
+      if (!parsed.version || !this.isVersionCompatible(parsed.version)) {
+        console.warn('标记数据版本不兼容，将被忽略');
+        return [];
+      }
+      
+      if (!Array.isArray(parsed.annotations)) {
+        console.warn('标记数据格式错误');
+        return [];
+      }
+      
+      return parsed.annotations.map((ann: any) => ({
+        ...ann,
+        createdAt: new Date(ann.createdAt),
+        updatedAt: new Date(ann.updatedAt)
+      }));
+    } catch (error) {
+      console.error('加载标记失败:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * 检查版本兼容性
+   */
+  private isVersionCompatible(version: string): boolean {
+    const currentParts = this.STORAGE_VERSION.split('.').map(Number);
+    const storedParts = version.split('.').map(Number);
+    
+    // 主版本必须相同
+    return currentParts[0] === storedParts[0];
+  }
+  
+  /**
+   * 导出标记数据
+   */
+  exportAnnotations(): string {
+    const annotations = this.loadAnnotations();
+    const exportData = {
+      version: this.STORAGE_VERSION,
+      exportedAt: new Date().toISOString(),
+      annotations: annotations.map(ann => ({
+        ...ann,
+        createdAt: ann.createdAt.toISOString(),
+        updatedAt: ann.updatedAt.toISOString()
+      }))
+    };
+    
+    return JSON.stringify(exportData, null, 2);
+  }
+  
+  /**
+   * 导入标记数据
+   */
+  async importAnnotations(data: string, merge: boolean = false): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        const importedData = JSON.parse(data);
+        
+        // 验证数据格式
+        if (!this.validateImportData(importedData)) {
+          reject(new Error('标记数据格式无效'));
+          return;
+        }
+        
+        // 转换日期格式
+        const importedAnnotations = importedData.annotations.map((ann: any) => ({
+          ...ann,
+          createdAt: new Date(ann.createdAt),
+          updatedAt: new Date(ann.updatedAt)
+        }));
+        
+        let finalAnnotations: Annotation[];
+        
+        if (merge) {
+          // 合并现有标记和导入标记
+          const existingAnnotations = this.loadAnnotations();
+          const existingIds = new Set(existingAnnotations.map(ann => ann.id));
+          
+          // 过滤掉重复ID的标记
+          const newAnnotations = importedAnnotations.filter((ann: Annotation) => !existingIds.has(ann.id));
+          finalAnnotations = [...existingAnnotations, ...newAnnotations];
+        } else {
+          // 完全替换
+          finalAnnotations = importedAnnotations;
+        }
+        
+        // 保存合并后的数据
+        this.saveAnnotations(finalAnnotations);
+        resolve();
+      } catch (error) {
+        reject(new Error(`导入标记失败: ${error instanceof Error ? error.message : String(error)}`));
+      }
+    });
+  }
+  
+  /**
+   * 验证导入数据格式
+   */
+  private validateImportData(data: any): boolean {
+    if (!data || typeof data !== 'object') return false;
+    if (!Array.isArray(data.annotations)) return false;
+    
+    // 验证每个标记的必需字段
+    return data.annotations.every((ann: Annotation) => {
+      return ann.id && 
+             ann.type && 
+             ann.cfi && 
+             ann.text && 
+             ann.chapterId &&
+             ann.createdAt &&
+             ann.updatedAt;
+    });
+  }
+  
+  /**
+   * 清空所有标记
+   */
+  clearAnnotations(): void {
+    try {
+      localStorage.removeItem(this.STORAGE_KEY);
+    } catch (error) {
+      console.error('清空标记失败:', error);
+    }
+  }
+  
+  /**
+   * 获取标记统计信息
+   */
+  getStorageStats(): { count: number; size: number; lastModified: string | null } {
+    try {
+      const data = localStorage.getItem(this.STORAGE_KEY);
+      if (!data) {
+        return { count: 0, size: 0, lastModified: null };
+      }
+      
+      const parsed = JSON.parse(data);
+      return {
+        count: Array.isArray(parsed.annotations) ? parsed.annotations.length : 0,
+        size: data.length,
+        lastModified: parsed.timestamp || null
+      };
+    } catch (error) {
+      console.error('获取存储统计失败:', error);
+      return { count: 0, size: 0, lastModified: null };
+    }
+  }
+}
+
+// 标记管理器
+class AnnotationManagerImpl implements AnnotationManager {
+  private storage: AnnotationStorage;
+  private annotations: Annotation[] = [];
+  private eventListeners: Map<string, Set<Function>> = new Map();
+  
+  constructor() {
+    this.storage = new AnnotationStorage();
+    this.loadAnnotations();
+  }
+  
+  /**
+   * 创建标记
+   */
+  async createAnnotation(type: AnnotationType, text: string, cfi: CFI, options?: any): Promise<Annotation> {
+    const annotation: Annotation = {
+      id: this.generateId(),
+      type,
+      text,
+      cfi,
+      color: options?.color || this.getDefaultColor(type),
+      note: options?.note,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      chapterId: options?.chapterId || this.extractChapterId(cfi),
+      pageNumber: options?.pageNumber
+    };
+    
+    this.annotations.push(annotation);
+    this.saveAnnotations();
+    
+    // 触发创建事件
+    this.emit('created', annotation);
+    
+    return annotation;
+  }
+  
+  /**
+   * 移除标记
+   */
+  async removeAnnotation(id: string): Promise<void> {
+    const index = this.annotations.findIndex(ann => ann.id === id);
+    if (index !== -1) {
+      const removed = this.annotations.splice(index, 1)[0];
+      this.saveAnnotations();
+      
+      // 触发移除事件
+      this.emit('removed', id);
+    }
+  }
+  
+  /**
+   * 更新标记
+   */
+  async updateAnnotation(id: string, updates: Partial<Annotation>): Promise<Annotation> {
+    const annotation = this.annotations.find(ann => ann.id === id);
+    if (!annotation) {
+      throw new Error(`标记不存在: ${id}`);
+    }
+    
+    // 更新字段
+    Object.assign(annotation, updates, {
+      updatedAt: new Date()
+    });
+    
+    this.saveAnnotations();
+    
+    // 触发更新事件
+    this.emit('updated', annotation);
+    
+    return annotation;
+  }
+  
+  /**
+   * 获取标记列表
+   */
+  getAnnotations(chapterId?: string): Annotation[] {
+    if (!chapterId) {
+      return [...this.annotations];
+    }
+    
+    return this.annotations.filter(ann => ann.chapterId === chapterId);
+  }
+  
+  /**
+   * 获取单个标记
+   */
+  getAnnotation(id: string): Annotation | undefined {
+    return this.annotations.find(ann => ann.id === id);
+  }
+  
+  /**
+   * 导出标记
+   */
+  exportAnnotations(): string {
+    return this.storage.exportAnnotations();
+  }
+  
+  /**
+   * 导入标记
+   */
+  async importAnnotations(data: string, merge: boolean = false): Promise<void> {
+    await this.storage.importAnnotations(data, merge);
+    this.loadAnnotations();
+    
+    // 触发重新加载事件
+    this.emit('reloaded', this.annotations);
+  }
+  
+  /**
+   * 监听事件
+   */
+  on(event: 'created' | 'removed' | 'updated' | 'reloaded', callback: Function): void {
+    if (!this.eventListeners.has(event)) {
+      this.eventListeners.set(event, new Set());
+    }
+    this.eventListeners.get(event)!.add(callback);
+  }
+  
+  /**
+   * 移除事件监听
+   */
+  off(event: 'created' | 'removed' | 'updated' | 'reloaded', callback: Function): void {
+    const listeners = this.eventListeners.get(event);
+    if (listeners) {
+      listeners.delete(callback);
+    }
+  }
+  
+  /**
+   * 触发事件
+   */
+  private emit(event: string, data?: any): void {
+    const listeners = this.eventListeners.get(event);
+    if (listeners) {
+      listeners.forEach(callback => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error(`事件监听器错误 (${event}):`, error);
+        }
+      });
+    }
+  }
+  
+  /**
+   * 加载标记
+   */
+  private loadAnnotations(): void {
+    this.annotations = this.storage.loadAnnotations();
+  }
+  
+  /**
+   * 保存标记
+   */
+  private saveAnnotations(): void {
+    this.storage.saveAnnotations(this.annotations);
+  }
+  
+  /**
+   * 生成唯一ID
+   */
+  private generateId(): string {
+    return `ann_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+  
+  /**
+   * 获取默认颜色
+   */
+  private getDefaultColor(type: AnnotationType): string {
+    const colors = {
+      highlight: '#ffeb3b',
+      underline: '#2196f3',
+      note: '#4caf50',
+      bookmark: '#ff9800'
+    };
+    return colors[type] || '#ffeb3b';
+  }
+  
+  /**
+   * 从CFI提取章节ID
+   */
+  private extractChapterId(cfi: CFI): string {
+    // 如果CFI有章节信息，直接使用
+    if (cfi.chapterId) {
+      return cfi.chapterId;
+    }
+    
+    // 否则从路径生成一个唯一标识
+    return cfi.path.substring(0, 20).replace(/[^a-zA-Z0-9]/g, '_');
+  }
+}
+
 export class EpubReader {
   private zip: JSZip | null = null;
   private info: EpubInfo | null = null;
@@ -312,6 +1327,12 @@ export class EpubReader {
   private currentChapterContent: string = '';
   private targetElementId: string = '';
   private currentChapterIndex: number = 0;
+  
+  // 标记功能相关属性
+  private annotationManager: AnnotationManagerImpl;
+  private svgOverlay: SVGOverlayManager;
+  private selectionManager: TextSelectionManager;
+  private annotationOptions: AnnotationOptions | null = null;
 
   constructor(options: EpubReaderOptions = {}) {
     this.options = {
@@ -324,6 +1345,12 @@ export class EpubReader {
     if (options.targetElementId) {
       this.targetElementId = options.targetElementId;
     }
+    
+    // 初始化标记功能组件
+    this.annotationManager = new AnnotationManagerImpl();
+    this.svgOverlay = new SVGOverlayManager();
+    this.selectionManager = new TextSelectionManager();
+    this.annotationOptions = null;
   }
 
   async load(epubData: ArrayBuffer | Uint8Array | Blob): Promise<void> {
@@ -2113,5 +3140,238 @@ export class EpubReader {
     }
     
     return null;
+  }
+
+  // ==================== 标记功能 ====================
+
+  /**
+   * 设置标记功能
+   */
+  setupAnnotations(options: AnnotationOptions): void {
+    this.annotationOptions = options;
+    
+    // 创建SVG覆盖层
+    this.svgOverlay.createOverlay(options.containerId);
+    
+    // 设置选择监听
+    this.selectionManager.setupSelectionListener(
+      options.containerId, 
+      options.toolbarId,
+      (selection: Selection) => {
+        // 可以在这里添加选择变化的回调逻辑
+      }
+    );
+    
+    // 监听标记事件
+    if (options.onAnnotationCreated) {
+      this.annotationManager.on('created', options.onAnnotationCreated);
+    }
+    if (options.onAnnotationRemoved) {
+      this.annotationManager.on('removed', options.onAnnotationRemoved);
+    }
+    if (options.onAnnotationUpdated) {
+      this.annotationManager.on('updated', options.onAnnotationUpdated);
+    }
+    
+    // 渲染现有标记
+    this.renderCurrentChapterAnnotations();
+  }
+
+  /**
+   * 从当前选择创建标记
+   */
+  async createAnnotationFromSelection(
+    type: AnnotationType, 
+    options?: any
+  ): Promise<Annotation | null> {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) {
+      throw new Error('没有选中的文字');
+    }
+    
+    const selectedText = selection.toString().trim();
+    if (selectedText.length === 0) {
+      throw new Error('选中的文字为空');
+    }
+    
+    try {
+      // 生成CFI
+      const range = selection.getRangeAt(0);
+      const cfi = this.generateCFIFromRange(range);
+      if (!cfi) {
+        throw new Error('无法生成CFI');
+      }
+      
+      // 获取当前章节信息
+      const currentChapter = this.getCurrentChapter();
+      
+      // 创建标记
+      const annotation = await this.annotationManager.createAnnotation(type, selectedText, cfi, {
+        ...options,
+        chapterId: currentChapter?.id || 'unknown'
+      });
+      
+      // 渲染到SVG
+      this.svgOverlay.renderAnnotation(annotation);
+      
+      // 清除选择
+      selection.removeAllRanges();
+      
+      return annotation;
+    } catch (error) {
+      throw new Error(`创建标记失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 从Range生成CFI
+   */
+  private generateCFIFromRange(range: Range): CFI | null {
+    try {
+      // 这里简化CFI生成，实际实现需要更复杂的逻辑
+      const startContainer = range.startContainer;
+      const endContainer = range.endContainer;
+      
+      // 获取路径信息
+      const startPath = this.getElementPath(startContainer.parentElement);
+      const endPath = this.getElementPath(endContainer.parentElement);
+      
+      // 生成简化的CFI
+      const cfi: CFI = {
+        path: `epub(/6/${startPath}/4[${range.startOffset}]/2:0,/6/${endPath}/4[${range.endOffset}]/2:0)`,
+        components: [
+          { type: 'element', index: 6 },
+          { type: 'text', index: startPath, assertion: String(range.startOffset) },
+          { type: 'text', index: endPath, assertion: String(range.endOffset) }
+        ],
+        localPath: range.toString(),
+        chapterId: this.getCurrentChapter()?.id
+      };
+      
+      return cfi;
+    } catch (error) {
+      console.error('生成CFI失败:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 获取元素路径
+   */
+  private getElementPath(element: Element | null): number {
+    if (!element || !element.parentElement) return 0;
+    
+    const siblings = Array.from(element.parentElement.children);
+    return siblings.indexOf(element);
+  }
+
+  /**
+   * 渲染当前章节的所有标记
+   */
+  private renderCurrentChapterAnnotations(): void {
+    const currentChapter = this.getCurrentChapter();
+    if (!currentChapter) return;
+    
+    const annotations = this.annotationManager.getAnnotations(currentChapter.id);
+    this.svgOverlay.clearAnnotations();
+    
+    annotations.forEach(annotation => {
+      this.svgOverlay.renderAnnotation(annotation);
+    });
+  }
+
+
+
+  /**
+   * 移除标记
+   */
+  async removeAnnotation(annotationId: string): Promise<void> {
+    try {
+      await this.annotationManager.removeAnnotation(annotationId);
+      this.svgOverlay.removeAnnotation(annotationId);
+    } catch (error) {
+      throw new Error(`移除标记失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 更新标记
+   */
+  async updateAnnotation(annotationId: string, updates: Partial<Annotation>): Promise<Annotation> {
+    try {
+      const annotation = await this.annotationManager.updateAnnotation(annotationId, updates);
+      this.svgOverlay.renderAnnotation(annotation);
+      return annotation;
+    } catch (error) {
+      throw new Error(`更新标记失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 获取标记
+   */
+  getAnnotation(annotationId: string): Annotation | undefined {
+    return this.annotationManager.getAnnotation(annotationId);
+  }
+
+  /**
+   * 获取所有标记
+   */
+  getAnnotations(chapterId?: string): Annotation[] {
+    return this.annotationManager.getAnnotations(chapterId);
+  }
+
+  /**
+   * 导出标记
+   */
+  exportAnnotations(): string {
+    return this.annotationManager.exportAnnotations();
+  }
+
+  /**
+   * 导入标记
+   */
+  async importAnnotations(data: string, merge: boolean = false): Promise<void> {
+    try {
+      await this.annotationManager.importAnnotations(data, merge);
+      this.renderCurrentChapterAnnotations();
+    } catch (error) {
+      throw new Error(`导入标记失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 获取标记管理器
+   */
+  getAnnotationManager(): AnnotationManagerImpl {
+    return this.annotationManager;
+  }
+
+  /**
+   * 获取当前选中的文字
+   */
+  getSelectedText(): string {
+    return this.selectionManager.getSelectedText();
+  }
+
+  /**
+   * 检查是否有选中的内容
+   */
+  hasSelection(): boolean {
+    return this.selectionManager.hasSelection();
+  }
+
+  /**
+   * 清除选择
+   */
+  clearSelection(): void {
+    this.selectionManager.clearSelection();
+  }
+
+  /**
+   * 获取选中的范围
+   */
+  getSelectedRange(): Range | null {
+    return this.selectionManager.getSelectedRange();
   }
 }

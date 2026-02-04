@@ -85,3 +85,45 @@ export interface CFICursorPosition {
   textNode?: Text;
   offset?: number;
 }
+
+// 标记相关类型定义
+export type AnnotationType = 'highlight' | 'underline' | 'note' | 'bookmark';
+
+export interface Annotation {
+  id: string;
+  type: AnnotationType;
+  cfi: CFI;
+  text: string;
+  color?: string;
+  note?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  chapterId: string;
+  pageNumber?: number;
+}
+
+export interface AnnotationToolbarConfig {
+  elementId: string;
+  position: 'top' | 'bottom' | 'floating';
+  showOnSelection: boolean;
+  autoHideDelay?: number;
+}
+
+export interface AnnotationManager {
+  createAnnotation: (type: AnnotationType, text: string, cfi: CFI, options?: any) => Promise<Annotation>;
+  removeAnnotation: (id: string) => Promise<void>;
+  updateAnnotation: (id: string, updates: Partial<Annotation>) => Promise<Annotation>;
+  getAnnotations: (chapterId?: string) => Annotation[];
+  exportAnnotations: () => string;
+  importAnnotations: (data: string) => Promise<void>;
+  on: (event: 'created' | 'removed' | 'updated', callback: Function) => void;
+  off: (event: 'created' | 'removed' | 'updated', callback: Function) => void;
+}
+
+export interface AnnotationOptions {
+  containerId: string;
+  toolbarId: string;
+  onAnnotationCreated?: (annotation: Annotation) => void;
+  onAnnotationRemoved?: (id: string) => void;
+  onAnnotationUpdated?: (annotation: Annotation) => void;
+}
