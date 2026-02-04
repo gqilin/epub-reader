@@ -330,8 +330,8 @@ class SVGOverlayManager {
     // 检查是否已存在SVG覆盖层
     const existingSvg = container.querySelector('.epub-annotation-overlay');
     if (existingSvg) {
-      this.svgElement = existingSvg as SVGElement;
-      return;
+      console.log('SVG覆盖层已存在，清理后重建');
+      existingSvg.remove();
     }
     
     // 创建SVG元素
@@ -355,13 +355,17 @@ class SVGOverlayManager {
     }
     
     container.appendChild(this.svgElement);
+    console.log(`SVG覆盖层创建成功: ${containerId}`);
   }
   
   /**
    * 渲染标记到SVG
    */
   renderAnnotation(annotation: Annotation): void {
-    if (!this.svgElement || !this.containerElement) return;
+    if (!this.svgElement || !this.containerElement) {
+      console.warn('SVG覆盖层未初始化，无法渲染标记');
+      return;
+    }
     
     // 移除已存在的标记
     this.removeAnnotation(annotation.id);
@@ -369,13 +373,21 @@ class SVGOverlayManager {
     try {
       const range = this.getRangeFromCFI(annotation.cfi);
       if (!range) {
-        console.warn('无法从CFI获取Range:', annotation.cfi);
+        console.warn(`无法从CFI获取Range: ${annotation.id}`, annotation.cfi);
+        // 尝试备用渲染方法
+        this.renderAnnotationFallback(annotation);
         return;
       }
       
       const rects = range.getClientRects();
       const containerRect = this.containerElement.getBoundingClientRect();
       const elements: SVGElement[] = [];
+      
+      if (rects.length === 0) {
+        console.warn(`标记 ${annotation.id} 没有有效的ClientRect，尝试备用方法`);
+        this.renderAnnotationFallback(annotation);
+        return;
+      }
       
       Array.from(rects).forEach(rect => {
         if (rect.width > 0 && rect.height > 0) {
@@ -388,8 +400,10 @@ class SVGOverlayManager {
       });
       
       this.annotations.set(annotation.id, elements);
+      console.log(`标记渲染成功: ${annotation.id} (${annotation.type})`);
+      
     } catch (error) {
-      console.error('渲染标记失败:', error);
+      console.error(`渲染标记失败: ${annotation.id}`, error);
     }
   }
   
@@ -620,6 +634,61 @@ class SVGOverlayManager {
     return null;
   }
   
+  /**
+   * 备用渲染方法（当CFI解析失败时使用）
+   */
+  private renderAnnotationFallback(annotation: Annotation): void {
+    if (!this.svgElement || !this.containerElement) return;
+    
+    try {
+      // 在容器顶部创建一个简单的指示标记
+      const indicator = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      indicator.setAttribute('cx', '20');
+      indicator.setAttribute('cy', '20');
+      indicator.setAttribute('r', '8');
+      indicator.setAttribute('fill', annotation.color || this.getDefaultColor(annotation.type));
+      indicator.setAttribute('data-annotation-id', annotation.id);
+      indicator.setAttribute('data-annotation-type', annotation.type);
+      indicator.setAttribute('title', `${this.getAnnotationTypeName(annotation.type)}: ${annotation.text.substring(0, 50)}...`);
+      
+      this.svgElement.appendChild(indicator);
+      
+      // 保存到annotations映射
+      this.annotations.set(annotation.id, [indicator]);
+      
+      console.log(`使用备用方法渲染标记: ${annotation.id}`);
+      
+    } catch (error) {
+      console.error(`备用渲染方法也失败: ${annotation.id}`, error);
+    }
+  }
+  
+  /**
+   * 获取默认颜色
+   */
+  private getDefaultColor(type: AnnotationType): string {
+    const colors = {
+      highlight: '#ffeb3b',
+      underline: '#2196f3',
+      note: '#4caf50',
+      bookmark: '#ff9800'
+    };
+    return colors[type] || '#ffeb3b';
+  }
+  
+  /**
+   * 获取标记类型名称
+   */
+  private getAnnotationTypeName(type: AnnotationType): string {
+    const names = {
+      highlight: '高亮',
+      underline: '下划线',
+      note: '笔记',
+      bookmark: '书签'
+    };
+    return names[type] || '未知';
+  }
+
   /**
    * 更新标记样式
    */
@@ -2183,9 +2252,7 @@ export class EpubReader {
 
       // 渲染当前章节的标记
       if (renderAnnotations && this.annotationOptions) {
-        setTimeout(() => {
-          this.renderCurrentChapterAnnotations();
-        }, 100); // 延迟渲染，确保DOM完全加载
+        this.renderAnnotationsWithDelay(targetId, 3); // 尝试3次，确保DOM完全加载
       }
 
       onSuccess?.();
@@ -3303,6 +3370,47 @@ export class EpubReader {
     annotations.forEach(annotation => {
       this.svgOverlay.renderAnnotation(annotation);
     });
+    
+    console.log(`渲染章节 ${currentChapter.id} 的 ${annotations.length} 个标记`);
+  }
+  
+  /**
+   * 延迟渲染标记（确保DOM完全加载）
+   */
+  private renderAnnotationsWithDelay(targetId: string, maxRetries: number = 3, currentRetry: number = 1): void {
+    const targetElement = document.getElementById(targetId);
+    
+    if (!targetElement) {
+      console.warn(`目标元素不存在: ${targetId}`);
+      return;
+    }
+    
+    // 检查章节内容是否完全加载
+    const contentElement = targetElement.querySelector('.epub-chapter-content');
+    if (!contentElement || contentElement.children.length === 0) {
+      if (currentRetry < maxRetries) {
+        console.log(`章节内容未完全加载，${200 * currentRetry}ms后重试 (${currentRetry}/${maxRetries})`);
+        setTimeout(() => {
+          this.renderAnnotationsWithDelay(targetId, maxRetries, currentRetry + 1);
+        }, 200 * currentRetry);
+      } else {
+        console.warn('章节内容加载失败，跳过标记渲染');
+      }
+      return;
+    }
+    
+    // 检查SVG覆盖层是否存在
+    let svgElement = targetElement.querySelector('.epub-annotation-overlay');
+    if (!svgElement) {
+      console.log('SVG覆盖层不存在，重新创建');
+      this.svgOverlay.createOverlay(targetId);
+    }
+    
+    // 延迟渲染标记，确保所有资源加载完成
+    setTimeout(() => {
+      this.renderCurrentChapterAnnotations();
+      console.log(`标记渲染完成 (重试次数: ${currentRetry})`);
+    }, 100 * currentRetry);
   }
 
 

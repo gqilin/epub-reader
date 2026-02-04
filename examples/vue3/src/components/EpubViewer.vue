@@ -128,6 +128,7 @@
         </div>
         <div class="annotation-modal-footer">
           <button @click="clearAllAnnotations" class="danger-btn">🗑️ 清空所有标记</button>
+          <button @click="resetRenderState" class="reset-btn">🔧 重置状态</button>
           <button @click="forceRerenderAnnotations" class="rerender-btn">🔄 重新渲染</button>
           <button @click="exportDebugData" class="export-btn">💾 导出调试数据</button>
           <button @click="refreshDebugInfo" class="refresh-btn">📊 刷新统计</button>
@@ -165,6 +166,11 @@ const showAnnotationModal = ref(false);
 const showDebugModal = ref(false);
 const annotations = ref<Annotation[]>([]);
 const debugStats = ref({ count: 0, size: 0, lastModified: null as string | null });
+
+// 防重复渲染状态
+let isRenderingAnnotations = false;
+let lastRenderedChapterId: string | null = null;
+let renderTimeoutId: number | null = null;
 
 // 计算当前章节的标记
 const currentAnnotations = computed(() => {
@@ -241,19 +247,28 @@ const onRenderError = (event: Event) => {
 };
 
 const updateNavigationState = () => {
+  const oldChapterIndex = currentChapterIndex.value;
+  
   currentChapterIndex.value = props.reader.getCurrentChapterIndex();
   hasPreviousChapter.value = props.reader.hasPreviousChapter();
   hasNextChapter.value = props.reader.hasNextChapter();
   
-  // 更新标记列表并重新渲染当前章节的标记
+  // 更新标记列表
   if (annotationsEnabled.value) {
     loadAnnotations();
-    // 重新渲染当前章节的标记
-    setTimeout(() => {
-      props.reader.getAnnotationManager().on('reloaded', () => {
-        console.log('标记重新加载完成');
-      });
-    }, 200);
+    
+    // 只有章节真正改变时才重新渲染标记
+    if (oldChapterIndex !== currentChapterIndex.value) {
+      console.log(`📖 章节从 ${oldChapterIndex} 切换到 ${currentChapterIndex.value}`);
+      
+      // 重置渲染状态，允许新章节的渲染
+      lastRenderedChapterId = null;
+      
+      // 延迟执行重渲染，确保章节完全加载
+      setTimeout(() => {
+        forceRerenderChapterAnnotations();
+      }, 500);
+    }
   }
 };
 
@@ -305,6 +320,24 @@ onUnmounted(() => {
   if (styleElement) {
     document.head.removeChild(styleElement);
   }
+  
+  // 清理标记相关的定时器
+  if (renderTimeoutId) {
+    clearTimeout(renderTimeoutId);
+    renderTimeoutId = null;
+  }
+  
+  // 重置渲染状态
+  isRenderingAnnotations = false;
+  lastRenderedChapterId = null;
+  
+  // 清理SVG覆盖层
+  const existingSvg = document.querySelector('.epub-annotation-overlay');
+  if (existingSvg) {
+    existingSvg.remove();
+  }
+  
+  console.log('🧹 组件卸载，清理标记相关资源');
 });
 
 // ==================== 标记功能方法 ====================
@@ -315,30 +348,58 @@ onUnmounted(() => {
 const initializeAnnotations = () => {
   if (!annotationsEnabled.value) return;
   
-  // 先清理现有的SVG覆盖层（如果有）
-  const existingSvg = document.querySelector('.epub-annotation-overlay');
-  if (existingSvg) {
-    existingSvg.remove();
-  }
+  console.log('🔧 初始化标记功能...');
   
-  props.reader.setupAnnotations({
-    containerId: 'epub-chapter-container',
-    toolbarId: 'annotation-toolbar',
-    onAnnotationCreated: handleAnnotationCreated,
-    onAnnotationRemoved: handleAnnotationRemoved,
-    onAnnotationUpdated: handleAnnotationUpdated
-  });
-  
-  loadAnnotations();
-  
-  // 延迟渲染当前章节的标记，确保DOM已经完全加载
-  setTimeout(() => {
-    const currentChapter = chapters.value[currentChapterIndex.value];
-    if (currentChapter) {
-      const chapterAnnotations = props.reader.getAnnotations(currentChapter.id);
-      console.log(`重新渲染章节 ${currentChapter.id} 的 ${chapterAnnotations.length} 个标记`);
+  try {
+    // 防止重复初始化
+    const container = document.getElementById('epub-chapter-container');
+    if (!container) {
+      console.warn('标记容器不存在，延迟初始化...');
+      setTimeout(initializeAnnotations, 200);
+      return;
     }
-  }, 300);
+    
+    // 检查是否已经初始化过
+    const existingSvg = container.querySelector('.epub-annotation-overlay');
+    const hasToolbar = document.getElementById('annotation-toolbar');
+    
+    if (existingSvg && hasToolbar) {
+      console.log('⏸️ 标记功能已初始化过，跳过重复初始化');
+      return;
+    }
+    
+    // 先清理现有的SVG覆盖层（如果有）
+    if (existingSvg) {
+      console.log('清理现有SVG覆盖层');
+      existingSvg.remove();
+    }
+    
+    props.reader.setupAnnotations({
+      containerId: 'epub-chapter-container',
+      toolbarId: 'annotation-toolbar',
+      onAnnotationCreated: handleAnnotationCreated,
+      onAnnotationRemoved: handleAnnotationRemoved,
+      onAnnotationUpdated: handleAnnotationUpdated
+    });
+    
+    // 加载标记数据
+    loadAnnotations();
+    
+    // 延迟渲染当前章节的标记，确保DOM已经完全加载
+    setTimeout(() => {
+      const currentChapter = chapters.value[currentChapterIndex.value];
+      if (currentChapter) {
+        const chapterAnnotations = props.reader.getAnnotations(currentChapter.id);
+        console.log(`📝 章节 ${currentChapter.id} 应该有 ${chapterAnnotations.length} 个标记`);
+        
+        // 设置当前章节已渲染标记，避免重复渲染
+        lastRenderedChapterId = currentChapter.id;
+      }
+    }, 300);
+    
+  } catch (error) {
+    console.error('初始化标记功能失败:', error);
+  }
 };
 
 /**
@@ -625,7 +686,135 @@ const refreshDebugInfo = () => {
 };
 
 /**
- * 强制重新渲染所有标记
+ * 重置渲染状态（调试用）
+ */
+const resetRenderState = () => {
+  console.log('🔄 重置渲染状态...');
+  
+  // 清理定时器
+  if (renderTimeoutId) {
+    clearTimeout(renderTimeoutId);
+    renderTimeoutId = null;
+  }
+  
+  // 重置状态
+  isRenderingAnnotations = false;
+  lastRenderedChapterId = null;
+  
+  // 清理SVG层
+  const existingSvg = document.querySelector('.epub-annotation-overlay');
+  if (existingSvg) {
+    existingSvg.remove();
+  }
+  
+  console.log('✅ 渲染状态已重置');
+  
+  // 重新初始化
+  if (annotationsEnabled.value) {
+    setTimeout(() => {
+      initializeAnnotations();
+    }, 100);
+  }
+};
+
+/**
+ * 强制重新渲染章节标记（章节切换时使用）
+ */
+const forceRerenderChapterAnnotations = () => {
+  if (!annotationsEnabled.value || !props.reader) return;
+  
+  // 防重复机制
+  const currentChapter = chapters.value[currentChapterIndex.value];
+  const currentChapterId = currentChapter?.id;
+  
+  if (isRenderingAnnotations) {
+    console.log('⏸️ 标记渲染进行中，跳过重复请求');
+    return;
+  }
+  
+  if (lastRenderedChapterId === currentChapterId) {
+    console.log('⏸️ 当前章节已渲染过，跳过重复渲染');
+    return;
+  }
+  
+  try {
+    console.log('🔄 章节切换，重新渲染标记...');
+    isRenderingAnnotations = true;
+    
+    // 清理之前的超时
+    if (renderTimeoutId) {
+      clearTimeout(renderTimeoutId);
+      renderTimeoutId = null;
+    }
+    
+    // 延迟执行，确保章节内容完全加载
+    renderTimeoutId = window.setTimeout(() => {
+      // 检查章节内容是否存在
+      const container = document.getElementById('epub-chapter-container');
+      if (!container) {
+        console.warn('章节容器不存在，延迟重试...');
+        isRenderingAnnotations = false;
+        setTimeout(forceRerenderChapterAnnotations, 200);
+        return;
+      }
+      
+      // 检查是否有实际内容
+      const content = container.querySelector('.epub-chapter-content');
+      if (!content || content.children.length === 0) {
+        console.warn('章节内容为空，延迟重试...');
+        isRenderingAnnotations = false;
+        setTimeout(forceRerenderChapterAnnotations, 200);
+        return;
+      }
+      
+      // 清理现有的SVG覆盖层
+      const existingSvg = container.querySelector('.epub-annotation-overlay');
+      if (existingSvg) {
+        console.log('清理现有SVG覆盖层');
+        existingSvg.remove();
+      }
+      
+      // 记录当前渲染的章节ID
+      lastRenderedChapterId = currentChapterId;
+      
+      // 重新创建SVG覆盖层
+      setTimeout(() => {
+        try {
+          if (!currentChapter) {
+            console.warn('当前章节信息不存在');
+            isRenderingAnnotations = false;
+            return;
+          }
+          
+          // 调用reader的标记渲染方法
+          const chapterAnnotations = props.reader.getAnnotations(currentChapter.id);
+          console.log(`章节 ${currentChapter.id} 有 ${chapterAnnotations.length} 个标记`);
+          
+          if (chapterAnnotations.length > 0) {
+            // 直接调用渲染，而不是重新初始化
+            console.log('🎨 直接渲染标记，避免重新初始化...');
+            initializeAnnotations();
+          } else {
+            console.log('当前章节没有标记');
+          }
+          
+        } catch (error) {
+          console.error('重新渲染标记失败:', error);
+        } finally {
+          isRenderingAnnotations = false;
+        }
+      }, 100);
+      
+    }, 300); // 增加延迟时间确保DOM完全加载
+    
+  } catch (error) {
+    console.error('章节标记重渲染失败:', error);
+    isRenderingAnnotations = false;
+  }
+};
+
+/**
+ * 强制重新渲染所有标记（手动触发）
  */
 const forceRerenderAnnotations = () => {
   if (!annotationsEnabled.value || !props.reader) return;
@@ -1200,6 +1389,21 @@ defineExpose({
 
 .rerender-btn:hover {
   background: #218838;
+}
+
+.reset-btn {
+  background: #6f42c1;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.reset-btn:hover {
+  background: #5a32a3;
 }
 
 /* 移动端适配 */
