@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>简化工具栏测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #1976d2;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .controls {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            background: #f8f9fa;
+        }
+        
+        .file-input-wrapper {
+            margin-bottom: 15px;
+        }
+        
+        .file-input-wrapper label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .file-input-wrapper input[type="file"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin: 4px;
+        }
+        
+        .btn-primary {
+            background: #1976d2;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #1565c0;
+        }
+        
+        .epub-container {
+            height: 600px;
+            overflow-y: auto;
+            position: relative;
+            background: white;
+        }
+        
+        /* EPUB内容容器 - 必须存在 */
+        #epub-content {
+            width: 100%;
+            height: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            background: white;
+        }
+        
+        /* 自定义工具栏 - 由调用方定义 */
+        #custom-toolbar {
+            position: fixed;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+            z-index: 1000;
+            min-width: 250px;
+            font-size: 14px;
+        }
+        
+        #custom-toolbar h3 {
+            margin: 0 0 12px 0;
+            font-size: 16px;
+            color: #333;
+        }
+        
+        #custom-toolbar button {
+            background: #1976d2;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 4px 0;
+            width: 100%;
+            transition: background 0.2s;
+        }
+        
+        #custom-toolbar button:hover {
+            background: #1565c0;
+        }
+        
+        #custom-toolbar .close-btn {
+            background: #f44336;
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: auto;
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+        
+        #custom-toolbar .close-btn:hover {
+            background: #d32f2f;
+        }
+        
+        .info {
+            background: #e3f2fd;
+            border-left: 4px solid #1976d2;
+            padding: 12px;
+            margin: 15px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        
+        .info h4 {
+            margin: 0 0 8px 0;
+            color: #1976d2;
+        }
+        
+        .info p {
+            margin: 4px 0;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>📚 简化工具栏测试</h1>
+            <p>测试EpubReader不自动创建DOM元素的功能</p>
+        </header>
+        
+        <div class="controls">
+            <div class="file-input-wrapper">
+                <label for="epub-file">选择 EPUB 文件:</label>
+                <input type="file" id="epub-file" accept=".epub">
+            </div>
+            
+            <button class="btn btn-primary" onclick="showToolbar()">显示工具栏</button>
+            <button class="btn btn-primary" onclick="hideToolbar()">隐藏工具栏</button>
+            <button class="btn btn-primary" onclick="toggleToolbar()">切换工具栏</button>
+            
+            <div class="info">
+                <h4>🎯 测试要点</h4>
+                <p>1. EPUB内容只显示一次，不重复</p>
+                <p>2. 如果目标元素不存在会抛出错误</p>
+                <p>3. 工具栏显示/隐藏正常工作</p>
+                <p>4. 不自动创建任何DOM元素</p>
+            </div>
+        </div>
+        
+        <div class="epub-container">
+            <!-- EPUB内容容器 - 元素必须预先存在 -->
+            <div id="epub-content">
+                <p>请选择一个 EPUB 文件来开始阅读...</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 工具栏 DOM 结构 - 由调用方提供 -->
+    <div id="custom-toolbar">
+        <button class="close-btn" onclick="hideToolbar()">×</button>
+        <h3>📝 自定义工具栏</h3>
+        <p>这是由调用方完全自定义的工具栏</p>
+        <button onclick="createAnnotation()">创建标记</button>
+        <button onclick="deleteAnnotation()">删除标记</button>
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee;">
+            <small>插件只负责显示隐藏，不创建DOM</small>
+        </div>
+    </div>
+
+    <script type="module">
+        import { EpubReader } from '../src/index.js';
+        
+        let reader = null;
+        
+        // 文件选择处理
+        document.getElementById('epub-file').addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            try {
+                console.log('🔄 开始加载 EPUB 文件...');
+                
+                // 清空之前的内容
+                document.getElementById('epub-content').innerHTML = '';
+                
+                // 创建 EpubReader 实例，传入工具栏元素ID
+                reader = new EpubReader({
+                    targetElementId: 'epub-content',  // 确保这个元素存在
+                    toolbarElementId: 'custom-toolbar'   // 传入工具栏DOM元素的ID
+                });
+                
+                // 加载 EPUB 文件
+                await reader.load(file);
+                
+                console.log('✅ EPUB 文件加载成功！');
+                
+                // 自动加载第一章
+                const chapters = reader.getChapters();
+                if (chapters.length > 0) {
+                    console.log('📖 加载第一章...');
+                    await reader.renderChapter(0);
+                    console.log('✅ 第一章加载完成');
+                }
+                
+                console.log('📚 书籍信息:', reader.getMetadata());
+                console.log('📑 章节数量:', chapters.length);
+                
+                alert('EPUB 文件加载成功！\n\n' +
+                      `标题: ${reader.getMetadata().title || '未知'}\n` +
+                      `章节数: ${chapters.length}\n` +
+                      '内容已显示在下方区域');
+                
+            } catch (error) {
+                console.error('❌ 加载 EPUB 失败:', error);
+                alert('加载失败: ' + error.message);
+            }
+        });
+        
+        // 工具栏控制函数
+        window.showToolbar = () => {
+            if (reader) {
+                reader.showToolbar();
+                console.log('👁️ 显示工具栏');
+            } else {
+                alert('请先加载 EPUB 文件');
+            }
+        };
+        
+        window.hideToolbar = () => {
+            if (reader) {
+                reader.hideToolbar();
+                console.log('🙈 隐藏工具栏');
+            } else {
+                alert('请先加载 EPUB 文件');
+            }
+        };
+        
+        window.toggleToolbar = () => {
+            if (reader) {
+                reader.toggleToolbar();
+                console.log('🔄 切换工具栏状态');
+            } else {
+                alert('请先加载 EPUB 文件');
+            }
+        };
+        
+        window.createAnnotation = () => {
+            alert('创建标记功能演示：插件不处理标记逻辑，只控制工具栏显示');
+        };
+        
+        window.deleteAnnotation = () => {
+            alert('删除标记功能演示：插件不处理标记逻辑，只控制工具栏显示');
+        };
+        
+        // 监听选区变化，显示工具栏
+        document.getElementById('epub-content').addEventListener('mouseup', () => {
+            setTimeout(() => {
+                const selection = window.getSelection();
+                if (selection && selection.toString().trim()) {
+                    console.log('📝 检测到文字选区，显示工具栏');
+                    if (reader) {
+                        reader.showToolbar();
+                    }
+                }
+            }, 100);
+        });
+        
+        // 页面加载完成后的初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 页面加载完成，可以开始测试');
+            console.log('📋 DOM元素检查:');
+            console.log('- epub-content 元素:', document.getElementById('epub-content'));
+            console.log('- custom-toolbar 元素:', document.getElementById('custom-toolbar'));
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EPUB标记功能测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .test-section {
+            margin-bottom: 30px;
+        }
+        
+        .test-section h2 {
+            color: #333;
+            border-bottom: 2px solid #1976d2;
+            padding-bottom: 10px;
+        }
+        
+        #epub-viewer {
+            min-height: 300px;
+            padding: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 4px;
+            background: white;
+            position: relative;
+            line-height: 1.6;
+            font-size: 16px;
+        }
+        
+        .test-text {
+            paragraph-break-inside: avoid;
+            orphans: 3;
+            widows: 3;
+        }
+        
+        .instructions {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        .status {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        
+        .debug-info {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>EPUB标记功能测试</h1>
+        
+        <div class="instructions">
+            <h3>测试说明：</h3>
+            <ol>
+                <li>在下文中选择任意文本</li>
+                <li>选择后应该自动显示标记工具栏</li>
+                <li>选择颜色和样式创建标记</li>
+                <li>标记应该准确覆盖选中的文本</li>
+                <li>点击标记应该能触发点击事件</li>
+            </ol>
+        </div>
+
+        <div class="test-section">
+            <h2>测试区域</h2>
+            <div id="epub-viewer">
+                <div class="test-text">
+                    <p>这是第一段测试文本。请选择这段文字中的任意部分来测试标记功能。标记功能应该能够准确识别您的选区并创建相应的高亮或下划线标记。</p>
+                    
+                    <p>这是第二段测试文本。您可以选择跨行的文本，包括<strong>粗体文字</strong>和<em>斜体文字</em>。标记系统应该能够正确处理不同格式的文本。</p>
+                    
+                    <p>这是第三段测试文本，包含更长的内容用于测试复杂选区。Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+                    
+                    <h3>子标题测试</h3>
+                    <p>这是子标题下的段落。请测试选择标题和段落内容的混合选区，确保标记能够正确定位。</p>
+                    
+                    <ul>
+                        <li>列表项一：可以选择这个列表项</li>
+                        <li>列表项二：也可以选择多个列表项</li>
+                        <li>列表项三：测试列表中的标记功能</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>调试信息</h2>
+            <div id="status" class="status">等待操作...</div>
+            <div id="debug" class="debug-info">调试信息将在这里显示</div>
+        </div>
+    </div>
+
+    <script type="module">
+        // 导入标记管理器
+        import { SVGMarkManager } from '../src/SVGMarkManager.js';
+        
+        let markManager = null;
+        const statusDiv = document.getElementById('status');
+        const debugDiv = document.getElementById('debug');
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️';
+            console.log(`[${timestamp}] ${prefix} ${message}`);
+            
+            if (statusDiv) {
+                statusDiv.textContent = `[${timestamp}] ${message}`;
+            }
+            
+            if (debugDiv) {
+                debugDiv.innerHTML += `<div>[${timestamp}] ${prefix} ${message}</div>`;
+                debugDiv.scrollTop = debugDiv.scrollHeight;
+            }
+        }
+
+        function initializeTest() {
+            try {
+                log('初始化标记管理器...');
+                
+                // 创建标记管理器
+                markManager = new SVGMarkManager(
+                    'epub-viewer',
+                    {
+                        onAnnotationCreated: (annotation) => {
+                            log(`标记创建成功: ${annotation.text.substring(0, 20)}... (${annotation.style.backgroundColor || annotation.style.textDecoration})`, 'success');
+                        },
+                        onAnnotationUpdated: (annotation) => {
+                            log(`标记更新: ${annotation.id}`);
+                        },
+                        onAnnotationDeleted: (markId) => {
+                            log(`标记删除: ${markId}`);
+                        },
+                        onSelectionChange: (selection) => {
+                            log(`选择变化: ${selection ? selection.text.substring(0, 20) + '...' : 'null'}`);
+                        },
+                        onToolbarToggle: (visible) => {
+                            log(`工具栏${visible ? '显示' : '隐藏'}`);
+                        }
+                    },
+                    {
+                        elementId: 'test-toolbar',
+                        position: 'floating',
+                        colors: ['#ffeb3b', '#4caf50', '#2196f3', '#e91e63', '#ff9800'],
+                        styles: ['highlight', 'underline', 'dashed', 'wavy'],
+                        autoHide: true,
+                        hideDelay: 5000
+                    }
+                );
+
+                log('标记管理器初始化完成', 'success');
+
+                // 监听标记点击事件
+                document.addEventListener('markClick', (event) => {
+                    const { mark, annotation } = event.detail;
+                    log(`点击标记: ${mark.text.substring(0, 20)}... (${mark.style.type})`, 'success');
+                });
+
+                // 监听工具栏显示事件
+                document.addEventListener('showMarkingToolbar', (event) => {
+                    const { selection, x, y } = event.detail;
+                    log(`显示工具栏: 选择文本 "${selection.text.substring(0, 20)}..." 位置 (${x}, ${y})`);
+                });
+
+                // 添加测试按钮功能
+                setTimeout(() => {
+                    log('测试准备完成，请选择文本开始测试');
+                }, 1000);
+
+            } catch (error) {
+                log(`初始化失败: ${error.message}`, 'error');
+                console.error('Initialization error:', error);
+            }
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', initializeTest);
+    </script>
+</body>
+</html>

@@ -75,6 +75,7 @@ new EpubReader(options?: EpubReaderOptions)
 - `encoding?: string` - Text encoding (default: 'utf8')
 - `loadCover?: boolean` - Whether to load cover images (default: true)
 - `targetElementId?: string` - DOM element ID for automatic chapter rendering
+- `toolbarElementId?: string` - DOM element ID for toolbar (toolbar DOM structure and styling provided by caller)
 
 #### Methods
 
@@ -224,10 +225,40 @@ await getResource(href: string): Promise<string | null>
 ##### Utility Methods
 
 ##### clearTarget(elementId)
-Clear the content of the target DOM element.
+Clear the content of target DOM element.
 
 ```typescript
 clearTarget(elementId: string): void
+```
+
+##### Toolbar Control Methods
+
+##### showToolbar()
+Show the toolbar element.
+
+```typescript
+showToolbar(): void
+```
+
+##### hideToolbar()
+Hide the toolbar element.
+
+```typescript
+hideToolbar(): void
+```
+
+##### toggleToolbar()
+Toggle toolbar visibility.
+
+```typescript
+toggleToolbar(): void
+```
+
+##### isToolbarVisible()
+Check if toolbar is currently visible.
+
+```typescript
+isToolbarVisible(): boolean
 ```
 
 ### Types
@@ -795,6 +826,134 @@ npm install
 npm run dev
 # Open http://localhost:5173
 ```
+
+## Toolbar Integration
+
+The simplified toolbar feature allows you to control toolbar visibility while keeping the DOM structure and styling under your control.
+
+### Basic Toolbar Setup
+
+```html
+<!-- HTML: Your custom toolbar element -->
+<div id="my-toolbar" style="position: fixed; top: 50%; right: 20px; transform: translateY(-50%); background: white; border: 1px solid #ddd; padding: 16px; border-radius: 8px;">
+  <h3>标记工具</h3>
+  <button onclick="createMark()">创建标记</button>
+  <button onclick="deleteMark()">删除标记</button>
+</div>
+
+<!-- EPUB content container -->
+<div id="epub-content"></div>
+```
+
+```typescript
+import { EpubReader } from 'epub-reader-core';
+
+// Initialize with toolbar element ID
+const reader = new EpubReader({
+  targetElementId: 'epub-content',
+  toolbarElementId: 'my-toolbar'  // Pass toolbar DOM element ID
+});
+
+await reader.load(epubFile);
+
+// Control toolbar programmatically
+reader.showToolbar();     // Show toolbar
+reader.hideToolbar();     // Hide toolbar
+reader.toggleToolbar();    // Toggle visibility
+const isVisible = reader.isToolbarVisible(); // Check status
+
+// Example: Show toolbar on text selection
+document.getElementById('epub-content').addEventListener('mouseup', () => {
+  const selection = window.getSelection();
+  if (selection && selection.toString().trim()) {
+    reader.showToolbar();
+  }
+});
+```
+
+### Vue 3 Toolbar Integration
+
+```vue
+<template>
+  <div>
+    <!-- Your custom toolbar component -->
+    <div id="custom-toolbar" v-show="toolbarVisible" class="my-toolbar">
+      <h3>标记工具</h3>
+      <button @click="createAnnotation">创建标记</button>
+      <button @click="deleteAnnotation">删除标记</button>
+    </div>
+    
+    <!-- EPUB content -->
+    <div id="epub-content" @mouseup="handleTextSelection"></div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue';
+import { EpubReader } from 'epub-reader-core';
+
+const toolbarVisible = ref(false);
+let reader = null;
+
+onMounted(async () => {
+  reader = new EpubReader({
+    targetElementId: 'epub-content',
+    toolbarElementId: 'custom-toolbar'
+  });
+  
+  await reader.load(epubFile);
+});
+
+const handleTextSelection = () => {
+  const selection = window.getSelection();
+  if (selection && selection.toString().trim()) {
+    reader.showToolbar();
+    toolbarVisible.value = true;
+  }
+};
+
+const createAnnotation = () => {
+  // Your annotation logic here
+  console.log('Creating annotation...');
+};
+
+const deleteAnnotation = () => {
+  // Your deletion logic here
+  console.log('Deleting annotation...');
+};
+</script>
+
+<style scoped>
+.my-toolbar {
+  position: fixed;
+  top: 50%;
+  right: 20px;
+  transform: translateY(-50%);
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  z-index: 1000;
+}
+</style>
+```
+
+### Key Features
+
+- **Simplified Control**: Plugin only manages toolbar visibility
+- **Custom Styling**: You define the toolbar's DOM structure and appearance
+- **Framework Agnostic**: Works with any JavaScript framework
+- **Event-Driven**: Show/hide toolbar based on user interactions
+- **ID-Based**: Pass toolbar element ID during initialization
+
+### Best Practices
+
+1. **Define Clear Visual Hierarchy**: Make sure your toolbar is visually distinct
+2. **Responsive Design**: Consider mobile users when positioning toolbar
+3. **Accessibility**: Add proper ARIA labels and keyboard navigation
+4. **Performance**: Use CSS transitions for smooth show/hide animations
+5. **User Experience**: Provide clear visual feedback for toolbar interactions
 
 ## Roadmap
 

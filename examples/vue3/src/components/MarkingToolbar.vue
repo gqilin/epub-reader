@@ -7,7 +7,7 @@
   >
     <!-- 颜色选择器 -->
     <div class="toolbar-section">
-      <div class="toolbar-label">颜色:</div>
+      <div class="toolbar-label">颜色1:</div>
       <div class="color-palette">
         <button
           v-for="color in colors"

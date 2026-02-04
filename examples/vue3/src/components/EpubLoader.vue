@@ -43,6 +43,14 @@
 import { ref } from 'vue';
 import { EpubReader } from 'epub-reader-src';
 
+interface Props {
+  toolbarElementId?: string;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  toolbarElementId: 'epub-marking-toolbar'
+});
+
 const emit = defineEmits<{
   loaded: [reader: EpubReader];
 }>();
@@ -95,9 +103,15 @@ const loadEpub = async (file: File) => {
       throw new Error('文件过大（超过100MB），可能超出浏览器处理能力');
     }
     
-    const reader = new EpubReader({
-      targetElementId: 'epub-chapter-container'
-    });
+    const readerOptions: any = {
+      targetElementId: 'epub-viewer'
+    };
+    
+    if (props.toolbarElementId) {
+      readerOptions.toolbarElementId = props.toolbarElementId;
+    }
+    
+    const reader = new EpubReader(readerOptions);
     await reader.load(file);
     emit('loaded', reader);
     

@@ -9,7 +9,11 @@
     </header>
     
     <main class="main">
-      <EpubLoader @loaded="onEpubLoaded" v-if="!reader" />
+      <EpubLoader 
+      @loaded="onEpubLoaded" 
+      v-if="!reader"
+      :toolbarElementId="toolbarConfig.elementId"
+    />
       
       <!-- 始终渲染容器，但只有加载后才显示内容 -->
       <div class="reader-container" :class="{ 'reader-hidden': !reader }">

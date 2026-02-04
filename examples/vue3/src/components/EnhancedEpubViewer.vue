@@ -1,20 +1,62 @@
 <template>
   <div class="epub-viewer-container">
-    <!-- 工具栏 -->
-    <MarkingToolbar
-      ref="toolbarRef"
-      :elementId="toolbarConfig.elementId"
-      :colors="toolbarConfig.colors"
-      :styles="toolbarConfig.styles"
-      :position="toolbarConfig.position"
-      :autoHide="toolbarConfig.autoHide"
-      :hideDelay="toolbarConfig.hideDelay"
-      @color-change="handleColorChange"
-      @style-change="handleStyleChange"
-      @create-mark="handleCreateMark"
-      @delete-mark="handleDeleteMark"
-      @visibility-change="handleToolbarVisibilityChange"
-    />
+    <!-- 简化的工具栏 - 由调用方定义DOM结构 -->
+    <div 
+      :id="toolbarConfig.elementId" 
+      class="custom-toolbar"
+      v-show="isToolbarVisible"
+    >
+      <div class="toolbar-header">
+        <h3>📝 标记工具</h3>
+        <button @click="hideToolbar" class="close-btn">×</button>
+      </div>
+      
+      <div class="toolbar-section">
+        <div class="toolbar-label">颜色:</div>
+        <div class="color-palette">
+          <button
+            v-for="color in toolbarConfig.colors"
+            :key="color"
+            :class="['color-btn', { active: selectedColor === color }]"
+            :style="{ backgroundColor: color }"
+            :title="color"
+            @click="selectColor(color)"
+          />
+        </div>
+      </div>
+
+      <div class="toolbar-section">
+        <div class="toolbar-label">样式:</div>
+        <div class="style-buttons">
+          <button
+            v-for="style in toolbarConfig.styles"
+            :key="style"
+            :class="['style-btn', { active: selectedStyle === style }]"
+            @click="selectStyle(style)"
+          >
+            getStyleLabel(style)
+          </button>
+        </div>
+      </div>
+
+      <div class="toolbar-section">
+        <button class="action-btn create-btn" @click="createMark">
+          创建标记
+        </button>
+        <button class="action-btn delete-btn" @click="deleteMark">
+          删除标记
+        </button>
+      </div>
+      
+      <div v-if="selectionInfo" class="toolbar-section selection-info">
+        <div class="selection-text">
+          选中文本: {{ selectionInfo.text.substring(0, 30) }}{{ selectionInfo.text.length > 30 ? '...' : '' }}
+        </div>
+        <div class="selection-cfi" v-if="selectionInfo.cfi">
+          CFI: {{ selectionInfo.cfi.substring(0, 30) }}{{ selectionInfo.cfi.length > 30 ? '...' : '' }}
+        </div>
+      </div>
+    </div>
 
     <!-- 章节内容 -->
     <div class="viewer-controls">
@@ -108,15 +150,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
-import { EpubReader, SVGMarkManager } from 'epub-reader-src';
+import { EpubReader } from 'epub-reader-src';
 import type { 
   EpubInfo as EpubInfoType, 
   EpubChapter, 
-  SVGMark, 
-  SelectionInfo, 
-  SVGMarkStyle 
+  Annotation,
+  SelectedTextInfo
 } from 'epub-reader-src/types';
-import MarkingToolbar from './MarkingToolbar.vue';
 
 interface Props {
   reader: EpubReader;
@@ -126,7 +166,7 @@ interface Props {
   toolbarConfig?: {
     elementId?: string;
     colors?: string[];
-    styles?: SVGMarkStyle['type'][];
+    styles?: string[];
     position?: 'floating' | 'top' | 'bottom';
     autoHide?: boolean;
     hideDelay?: number;
@@ -135,10 +175,10 @@ interface Props {
 
 interface Emits {
   (e: 'chapter-change', chapter: EpubChapter, index: number): void;
-  (e: 'mark-created', mark: SVGMark): void;
+  (e: 'mark-created', mark: Annotation): void;
   (e: 'mark-deleted', markId: string): void;
-  (e: 'mark-updated', mark: SVGMark): void;
-  (e: 'selection-change', selection: SelectionInfo | null): void;
+  (e: 'mark-updated', mark: Annotation): void;
+  (e: 'selection-change', selection: SelectedTextInfo | null): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -161,15 +201,10 @@ const currentChapterIndex = ref(props.initialChapterIndex);
 const currentChapter = ref<EpubChapter | null>(null);
 const isToolbarVisible = ref(false);
 const selectedColor = ref('#ffeb3b');
-const selectedStyle = ref<SVGMarkStyle['type']>('highlight');
-const marks = ref<SVGMark[]>([]);
-const selectedMarkInfo = ref<SVGMark | null>(null);
-
-// SVG标记管理器
-let svgMarkManager: SVGMarkManager | null = null;
-
-// 工具栏引用
-const toolbarRef = ref();
+const selectedStyle = ref('highlight');
+const marks = ref<Annotation[]>([]);
+const selectedMarkInfo = ref<Annotation | null>(null);
+const selectionInfo = ref<SelectedTextInfo | null>(null);
 
 // 计算属性
 const chapters = computed(() => props.epubInfo?.chapters || []);
@@ -212,13 +247,7 @@ console.log('📖 [DEBUG] 准备加载章节:', {
       targetElementId: props.viewerElementId
     });
     
-    await props.reader.loadChapterByIndex(index, {
-      targetElementId: props.viewerElementId
-    });
-    
-    await props.reader.loadChapterByIndex(index, {
-      targetElementId: props.viewerElementId
-    });
+await props.reader.loadChapterByIndex(index);
     
     console.log('✅ [DEBUG] EpubReader.loadChapterByIndex 完成，更新状态');
     
@@ -328,114 +357,141 @@ const initMarkingManager = () => {
 };
 
 // 处理文本选择
-const handleTextSelection = (event: MouseEvent) => {
+const handleTextSelection = () => {
   setTimeout(() => {
     const selection = window.getSelection();
     if (selection && selection.toString().trim().length > 0) {
-      const selectionInfo = svgMarkManager?.getSelectedTextInfo();
-      if (selectionInfo) {
-        // 触发自定义事件显示工具栏
-        const customEvent = new CustomEvent('showMarkingToolbar', {
-          detail: {
-            selection: selectionInfo,
-            x: event.clientX,
-            y: event.clientY
-          }
-        });
-        document.dispatchEvent(customEvent);
-      }
+      // 这里可以获取选区信息
+      selectionInfo.value = {
+        text: selection.toString(),
+        cfi: `epub-generated-cfi-${Date.now()}`,
+        range: selection.getRangeAt(0),
+        startOffset: selection.getRangeAt(0).startOffset,
+        endOffset: selection.getRangeAt(0).endOffset
+      };
+      
+      // 使用新的简化工具栏系统
+      showToolbar();
+      
+      emit('selection-change', selectionInfo.value);
+    } else {
+      selectionInfo.value = null;
+      hideToolbar();
+      emit('selection-change', null);
     }
   }, 10);
 };
 
-// 处理工具栏事件
-const handleColorChange = (color: string) => {
+// 工具栏选择方法
+const selectColor = (color: string) => {
   selectedColor.value = color;
 };
 
-const handleStyleChange = (style: SVGMarkStyle['type']) => {
+const selectStyle = (style: string) => {
   selectedStyle.value = style;
 };
 
-const handleCreateMark = ({ color, style }: { color: string; style: SVGMarkStyle['type'] }) => {
-  if (svgMarkManager) {
-    selectedColor.value = color;
-    selectedStyle.value = style;
-    const mark = svgMarkManager.createMark(color, style);
-    if (mark) {
-      marks.value.push(mark);
-      emit('mark-created', mark);
-    }
+const createMark = () => {
+  if (selectionInfo.value) {
+    const mark: Annotation = {
+      id: `mark_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      cfi: selectionInfo.value.cfi,
+      text: selectionInfo.value.text,
+      selectedText: selectionInfo.value.text,
+      color: selectedColor.value,
+      created: new Date(),
+      updated: new Date(),
+      style: {
+        backgroundColor: selectedColor.value
+      },
+      chapterHref: currentChapter.value?.href,
+      chapterTitle: currentChapter.value?.title
+    };
+    
+    marks.value.push(mark);
+    emit('mark-created', mark);
+    hideToolbar(); // 创建后隐藏工具栏
   }
 };
 
-const handleDeleteMark = () => {
-  if (svgMarkManager) {
-    svgMarkManager.removeMarkAtSelection();
+const deleteMark = () => {
+  if (selectionInfo.value) {
+    // 可以在这里实现删除选区位置的标记
+    console.log('删除选区的标记');
   }
 };
 
-const handleToolbarVisibilityChange = (visible: boolean) => {
-  isToolbarVisible.value = visible;
-};
-
-// 处理标记点击
-const handleMarkClick = (event: CustomEvent) => {
-  const { mark } = event.detail;
-  selectedMarkInfo.value = mark;
+const getStyleLabel = (style: string): string => {
+  const labels: Record<string, string> = {
+    highlight: '高亮',
+    underline: '下划线',
+    dashed: '虚线',
+    wavy: '波浪线',
+    dotted: '点线',
+    double: '双线',
+    solid: '实线'
+  };
+  return labels[style] || style;
 };
 
 // 更新当前章节的标记
 const updateMarksForChapter = () => {
-  if (svgMarkManager && currentChapter.value) {
-    console.log('🔍 [DEBUG] updateMarksForChapter:', {
-      chapterHref: currentChapter.value.href,
-      chapterTitle: currentChapter.value.title
-    });
-    const chapterMarks = svgMarkManager.getMarksByChapter(currentChapter.value.href);
-    marks.value = chapterMarks;
+  if (currentChapter.value) {
+    const chapterMarks = marks.value.filter(mark => mark.chapterHref === currentChapter.value?.href);
     console.log('📝 [DEBUG] 更新章节标记:', { marksCount: chapterMarks.length });
   }
 };
 
 // 工具栏控制
+const showToolbar = () => {
+  if (props.reader) {
+    props.reader.showToolbar();
+    isToolbarVisible.value = true;
+  }
+};
+
+const hideToolbar = () => {
+  if (props.reader) {
+    props.reader.hideToolbar();
+    isToolbarVisible.value = false;
+  }
+};
+
 const toggleToolbar = () => {
-  if (toolbarRef.value) {
-    toolbarRef.value.toggle();
+  if (props.reader) {
+    props.reader.toggleToolbar();
+    isToolbarVisible.value = props.reader.isToolbarVisible();
   }
 };
 
 const showAllMarks = () => {
-  if (svgMarkManager) {
-    marks.value = svgMarkManager.getAllMarks();
-  }
+  // 这里可以实现显示所有标记的逻辑
+  console.log('显示所有标记:', marks.value);
 };
 
 const clearAllMarks = () => {
-  if (svgMarkManager && confirm('确定要清除所有标记吗？')) {
-    svgMarkManager.clearAllMarks();
+  if (confirm('确定要清除所有标记吗？')) {
     marks.value = [];
     selectedMarkInfo.value = null;
   }
 };
 
 // 标记操作
-const editMark = (mark: SVGMark) => {
+const editMark = (mark: Annotation) => {
   // 这里可以打开一个编辑对话框
-  const newColor = prompt('请输入新的颜色 (例如: #ff0000):', mark.style.color);
-  if (newColor && svgMarkManager) {
-    const success = svgMarkManager.updateMarkStyle(mark.id, { color: newColor });
-    if (success) {
-      mark.style.color = newColor;
-      mark.updated = new Date();
-      emit('mark-updated', mark);
-    }
+  const newColor = prompt('请输入新的颜色 (例如: #ff0000):', mark.color);
+  if (newColor) {
+    mark.color = newColor;
+    mark.updated = new Date();
+    emit('mark-updated', mark);
   }
 };
 
 const removeMark = (markId: string) => {
-  if (svgMarkManager && confirm('确定要删除这个标记吗？')) {
-    svgMarkManager.removeMark(markId);
+  if (confirm('确定要删除这个标记吗？')) {
+    marks.value = marks.value.filter(mark => mark.id !== markId);
+    selectedMarkInfo.value = null;
+    emit('mark-deleted', markId);
   }
 };
 
@@ -445,35 +501,33 @@ const formatDate = (date: Date): string => {
 };
 
 // 添加标记（从外部数据）
-const addExternalMark = (markData: Omit<SVGMark, 'id' | 'created' | 'updated'>) => {
-  if (svgMarkManager) {
-    const markId = svgMarkManager.addMark(markData);
-    const mark = svgMarkManager.getAllMarks().find(m => m.id === markId);
-    if (mark) {
-      marks.value.push(mark);
-      emit('mark-created', mark);
-    }
-    return markId;
-  }
-  return '';
+const addExternalMark = (markData: Omit<Annotation, 'id' | 'created' | 'updated'>) => {
+  const mark: Annotation = {
+    id: `mark_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    ...markData,
+    created: new Date(),
+    updated: new Date()
+  };
+  marks.value.push(mark);
+  emit('mark-created', mark);
+  return mark.id;
 };
 
 // 批量添加标记
-const addExternalMarks = (marksData: Omit<SVGMark, 'id' | 'created' | 'updated'>[]) => {
-  if (svgMarkManager) {
-    const markIds = svgMarkManager.addMarks(marksData);
-    const newMarks = svgMarkManager.getAllMarks().filter(m => markIds.includes(m.id));
-    marks.value.push(...newMarks);
-    newMarks.forEach(mark => emit('mark-created', mark));
-    return markIds;
-  }
-  return [];
+const addExternalMarks = (marksData: Omit<Annotation, 'id' | 'created' | 'updated'>[]) => {
+  const newMarks = marksData.map(markData => ({
+    id: `mark_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    ...markData,
+    created: new Date(),
+    updated: new Date()
+  }));
+  marks.value.push(...newMarks);
+  newMarks.forEach(mark => emit('mark-created', mark));
+  return newMarks.map(mark => mark.id);
 };
 
 // 生命周期
 onMounted(() => {
-  initMarkingManager();
-  
   // 加载初始章节
   if (chapters.value.length > 0) {
     loadChapterByIndex(currentChapterIndex.value);
@@ -481,11 +535,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  if (svgMarkManager) {
-    svgMarkManager.destroy();
-    svgMarkManager = null;
-  }
-  document.removeEventListener('markClick', handleMarkClick);
+  // 清理资源
 });
 
 // 监听章节变化
@@ -664,7 +714,9 @@ defineExpose({
 }
 
 .epub-content {
-  flex: 1;
+  margin: 0 auto;
+  width: 800px;
+  height: 1000px;
   padding: 20px;
   overflow-y: auto;
   background: white;
@@ -733,6 +785,195 @@ defineExpose({
 
 .remove-btn:hover {
   background: #da190b;
+}
+
+/* 自定义工具栏样式 */
+.custom-toolbar {
+  position: fixed;
+  top: 50%;
+  right: 20px;
+  transform: translateY(-50%);
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1001;
+  min-width: 280px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+}
+
+.toolbar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.toolbar-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: #666;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.toolbar-section {
+  margin-bottom: 12px;
+}
+
+.toolbar-section:last-child {
+  margin-bottom: 0;
+}
+
+.toolbar-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.color-palette {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.color-btn {
+  width: 28px;
+  height: 28px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.color-btn:hover {
+  transform: scale(1.1);
+  border-color: #333;
+}
+
+.color-btn.active {
+  border-color: #1976d2;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
+}
+
+.color-btn.active::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+}
+
+.style-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.style-btn {
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #f5f5f5;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.style-btn:hover {
+  background: #e3f2fd;
+  border-color: #1976d2;
+}
+
+.style-btn.active {
+  background: #1976d2;
+  color: white;
+  border-color: #1976d2;
+}
+
+.action-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 70px;
+  margin: 2px 0;
+}
+
+.create-btn {
+  background: #4caf50;
+  color: white;
+}
+
+.create-btn:hover {
+  background: #45a049;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.delete-btn {
+  background: #f44336;
+  color: white;
+}
+
+.delete-btn:hover {
+  background: #da190b;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+}
+
+.selection-info {
+  border-top: 1px solid #e0e0e0;
+  padding-top: 8px;
+  margin-top: 8px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.selection-text {
+  font-size: 11px;
+  color: #333;
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.selection-cfi {
+  font-size: 10px;
+  color: #666;
+  font-family: 'Courier New', monospace;
+  word-break: break-all;
 }
 
 /* 响应式设计 */

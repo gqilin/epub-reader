@@ -173,7 +173,7 @@ class AnnotationRenderer {
   }
 }
 
-// 工具栏管理器
+// 工具栏管理器 - 简化版本，只控制显示隐藏
 class ToolbarManager {
   private element: HTMLElement | null = null;
   private isVisible: boolean = false;
@@ -187,7 +187,7 @@ class ToolbarManager {
   
   show(): void {
     if (this.element) {
-      this.element.style.display = 'flex';
+      this.element.style.display = '';
       this.isVisible = true;
       this.onToggleCallback?.(true);
     }
@@ -213,111 +213,15 @@ class ToolbarManager {
     return this.isVisible;
   }
   
-  updateSelectionInfo(selectionInfo: SelectedTextInfo | null): void {
-    if (!this.element) return;
-    
-    const selectionTextEl = this.element.querySelector('.selection-text');
-    const cfiDisplayEl = this.element.querySelector('.cfi-display');
-    
-    if (selectionInfo) {
-      if (selectionTextEl) {
-        selectionTextEl.textContent = `选中: ${selectionInfo.text.substring(0, 50)}${selectionInfo.text.length > 50 ? '...' : ''}`;
-      }
-      if (cfiDisplayEl) {
-        cfiDisplayEl.textContent = `CFI: ${selectionInfo.cfi.substring(0, 50)}${selectionInfo.cfi.length > 50 ? '...' : ''}`;
-      }
-    } else {
-      if (selectionTextEl) selectionTextEl.textContent = '';
-      if (cfiDisplayEl) cfiDisplayEl.textContent = '';
-    }
-  }
-  
   private initializeToolbar(): void {
     if (!this.element) return;
     
-    // 初始隐藏
+    // 初始隐藏工具栏
     this.element.style.display = 'none';
     
-    // 设置基础样式
-    this.element.style.cssText = `
-      position: fixed;
-      top: 50%;
-      left: 20px;
-      transform: translateY(-50%);
-      background: white;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      padding: 1rem;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-      z-index: 10000;
-      flex-direction: column;
-      gap: 0.5rem;
-      min-width: 250px;
-      font-size: 14px;
-    `;
-    
-    // 创建工具栏内容
-    this.element.innerHTML = `
-      <div class="toolbar-header">
-        <h3 style="margin: 0; font-size: 16px;">文本标记</h3>
-        <button class="close-btn" onclick="this.parentElement.parentElement.style.display='none'">×</button>
-      </div>
-      <div class="selection-text" style="color: #666; font-size: 12px; min-height: 16px;"></div>
-      <div class="cfi-display" style="color: #888; font-size: 11px; font-family: monospace; word-break: break-all;"></div>
-      <div class="color-picker">
-        <div style="margin-bottom: 0.5rem;">选择颜色:</div>
-        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-          <button class="color-btn" data-color="#ffeb3b" style="background: #ffeb3b; width: 30px; height: 30px; border: 1px solid #ddd; cursor: pointer; border-radius: 4px;"></button>
-          <button class="color-btn" data-color="#28a745" style="background: #28a745; width: 30px; height: 30px; border: 1px solid #ddd; cursor: pointer; border-radius: 4px;"></button>
-          <button class="color-btn" data-color="#007bff" style="background: #007bff; width: 30px; height: 30px; border: 1px solid #ddd; cursor: pointer; border-radius: 4px;"></button>
-          <button class="color-btn" data-color="#ff69b4" style="background: #ff69b4; width: 30px; height: 30px; border: 1px solid #ddd; cursor: pointer; border-radius: 4px;"></button>
-        </div>
-      </div>
-      <div class="style-options">
-        <div style="margin-bottom: 0.5rem;">样式选项:</div>
-        <select class="style-select" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
-          <option value="highlight">高亮背景</option>
-          <option value="underline">下划线</option>
-          <option value="dashed">虚线</option>
-          <option value="dotted">点线</option>
-          <option value="wavy">波浪线</option>
-          <option value="double">双线</option>
-        </select>
-      </div>
-      <button class="create-annotation" style="background: #007bff; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; width: 100%;">
-        创建标记
-      </button>
-    `;
-    
-    // 绑定事件
-    this.bindEvents();
+    // 不再设置具体的样式和内容，由调用方提供
+    console.log(`工具栏管理器已初始化，DOM元素ID已通过参数传入`);
   }
-  
-  private bindEvents(): void {
-    if (!this.element) return;
-    
-    // 颜色选择
-    const colorButtons = this.element.querySelectorAll('.color-btn') as NodeListOf<HTMLElement>;
-    colorButtons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        colorButtons.forEach(b => b.style.border = '1px solid #ddd');
-        btn.style.border = '2px solid #007bff';
-        this.selectedColor = btn.getAttribute('data-color') || '#ffeb3b';
-      });
-    });
-    
-    // 创建标记按钮
-    const createBtn = this.element.querySelector('.create-annotation');
-    if (createBtn) {
-      createBtn.addEventListener('click', () => {
-        this.onCreateAnnotation?.();
-      });
-    }
-  }
-  
-  public selectedColor: string = '#ffeb3b';
-  public selectedStyle: string = 'highlight';
-  public onCreateAnnotation?: () => void;
 }
 
 // CFI高亮管理器
@@ -833,6 +737,7 @@ export class EpubReader {
   private currentChapterContent: string = '';
   private targetElementId: string = '';
   private currentChapterIndex: number = 0;
+  private toolbarManager: ToolbarManager | null = null;
 
   constructor(options: EpubReaderOptions = {}) {
     this.options = {
@@ -844,6 +749,11 @@ export class EpubReader {
     // 如果初始化时提供了目标元素ID，保存它
     if (options.targetElementId) {
       this.targetElementId = options.targetElementId;
+    }
+
+    // 如果提供了工具栏元素ID，初始化工具栏管理器
+    if (options.toolbarElementId) {
+      this.toolbarManager = new ToolbarManager(options.toolbarElementId);
     }
   }
 
@@ -1644,31 +1554,9 @@ export class EpubReader {
     // 等待DOM元素存在（最多等待2秒）
     let targetElement = await this.waitForElement(targetId, 2000);
     
-    // 如果元素不存在，自动创建它
+// 如果元素不存在，抛出错误而不是自动创建
     if (!targetElement) {
-      console.warn(`目标元素不存在: #${targetId}，正在自动创建...`);
-      targetElement = document.createElement('div');
-      targetElement.id = targetId;
-      targetElement.className = className;
-      
-      // 添加基本样式确保元素可见
-      targetElement.style.cssText = `
-        width: 100%;
-        min-height: 100vh;
-        padding: 20px;
-        box-sizing: border-box;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        line-height: 1.6;
-        background: #fff;
-      `;
-      
-      // 如果有body，添加到body末尾；否则添加到document中
-      if (document.body) {
-        document.body.appendChild(targetElement);
-      } else {
-        document.appendChild(targetElement);
-      }
-      console.log(`已自动创建目标元素: #${targetId}`);
+      throw new Error(`目标元素不存在: #${targetId}。请确保在页面中存在此ID的DOM元素。`);
     }
 
     // 保存当前使用的元素ID
@@ -2657,11 +2545,11 @@ export class EpubReader {
     }
   }
 
-  /**
-   * 等待DOM元素存在
-   * @param elementId 元素ID
-   * @param timeout 超时时间（毫秒）
-   */
+/**
+    * 等待DOM元素存在
+    * @param elementId 元素ID
+    * @param timeout 超时时间（毫秒）
+    */
   private async waitForElement(elementId: string, timeout: number = 2000): Promise<HTMLElement | null> {
     const startTime = Date.now();
     
@@ -2676,5 +2564,39 @@ export class EpubReader {
     }
     
     return null;
+  }
+
+  /**
+   * 显示工具栏
+   */
+  showToolbar(): void {
+    if (this.toolbarManager) {
+      this.toolbarManager.show();
+    }
+  }
+
+  /**
+   * 隐藏工具栏
+   */
+  hideToolbar(): void {
+    if (this.toolbarManager) {
+      this.toolbarManager.hide();
+    }
+  }
+
+  /**
+   * 切换工具栏显示状态
+   */
+  toggleToolbar(): void {
+    if (this.toolbarManager) {
+      this.toolbarManager.toggle();
+    }
+  }
+
+  /**
+   * 获取工具栏是否可见
+   */
+  isToolbarVisible(): boolean {
+    return this.toolbarManager ? this.toolbarManager.isToolbarVisible() : false;
   }
 }

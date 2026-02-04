@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工具栏测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        #test-area {
+            width: 600px;
+            height: 400px;
+            border: 2px solid #ccc;
+            padding: 20px;
+            background: white;
+            position: relative;
+            margin: 20px auto;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        
+        .log {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 300px;
+            max-height: 200px;
+            overflow-y: auto;
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>工具栏测试页面</h1>
+    <p>选择下方文本以测试工具栏功能：</p>
+    
+    <div id="test-area">
+        这是一段测试文本。请选择这段文字中的任意部分，工具栏应该会自动显示，并在5秒后自动隐藏。请观察是否有错误出现。
+        
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.
+        
+        这是另一段测试文本，用于测试工具栏的显示和隐藏功能是否正常工作。
+    </div>
+    
+    <div id="log" class="log">
+        <div>日志输出：</div>
+    </div>
+
+    <div id="epub-marking-toolbar" style="display: none;"></div>
+
+    <script>
+        const log = document.getElementById('log');
+        
+        function addLog(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            log.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // 模拟工具栏事件
+        document.addEventListener('showMarkingToolbar', (event) => {
+            const { selection, x, y } = event.detail;
+            addLog(`显示工具栏: "${selection.text.substring(0, 30)}..." 位置(${x}, ${y})`);
+            
+            const toolbar = document.getElementById('epub-marking-toolbar');
+            if (toolbar) {
+                toolbar.style.display = 'block';
+                toolbar.style.position = 'fixed';
+                toolbar.style.left = x + 'px';
+                toolbar.style.top = y + 'px';
+                toolbar.style.background = 'white';
+                toolbar.style.border = '1px solid #ccc';
+                toolbar.style.padding = '10px';
+                toolbar.style.borderRadius = '4px';
+                toolbar.style.zIndex = '1001';
+                toolbar.innerHTML = `
+                    <div>选中文本: ${selection.text.substring(0, 20)}...</div>
+                    <button onclick="hideToolbar()">隐藏</button>
+                `;
+            }
+        });
+
+        document.addEventListener('hideMarkingToolbar', () => {
+            addLog('隐藏工具栏事件触发');
+            hideToolbar();
+        });
+
+        function hideToolbar() {
+            const toolbar = document.getElementById('epub-marking-toolbar');
+            if (toolbar) {
+                toolbar.style.display = 'none';
+                addLog('工具栏已隐藏');
+            }
+        }
+
+        // 简单的选择监听器
+        document.addEventListener('mouseup', () => {
+            const selection = window.getSelection();
+            if (selection && selection.toString().trim().length > 0) {
+                const range = selection.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
+                
+                const event = new CustomEvent('showMarkingToolbar', {
+                    detail: {
+                        selection: {
+                            text: selection.toString(),
+                            cfi: 'test-cfi'
+                        },
+                        x: rect.left + rect.width / 2,
+                        y: rect.top
+                    }
+                });
+                
+                document.dispatchEvent(event);
+                
+                // 5秒后自动隐藏
+                setTimeout(() => {
+                    document.dispatchEvent(new CustomEvent('hideMarkingToolbar'));
+                }, 5000);
+            }
+        });
+
+        addLog('测试页面加载完成');
+    </script>
+</body>
+</html>
