@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVG标记功能测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+        }
+        
+        .test-content {
+            line-height: 1.6;
+            font-size: 16px;
+            color: #333;
+            user-select: text;
+            padding: 20px;
+            background: #fafafa;
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+        
+        .toolbar {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            position: absolute;
+            display: none;
+            z-index: 1001;
+        }
+        
+        .color-palette {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        
+        .color-btn {
+            width: 28px;
+            height: 28px;
+            border: 2px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .color-btn:hover {
+            transform: scale(1.1);
+            border-color: #333;
+        }
+        
+        .style-buttons {
+            display: flex;
+            gap: 6px;
+        }
+        
+        .style-btn {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #f5f5f5;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 12px;
+        }
+        
+        .style-btn:hover {
+            background: #e3f2fd;
+            border-color: #1976d2;
+        }
+        
+        .style-btn.active {
+            background: #1976d2;
+            color: white;
+            border-color: #1976d2;
+        }
+        
+        .action-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+        
+        .create-btn {
+            background: #4caf50;
+            color: white;
+        }
+        
+        .create-btn:hover {
+            background: #45a049;
+        }
+        
+        .delete-btn {
+            background: #f44336;
+            color: white;
+        }
+        
+        .delete-btn:hover {
+            background: #da190b;
+        }
+        
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            background: #e3f2fd;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #1565c0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🎨 SVG标记功能测试</h1>
+        
+        <div class="test-section">
+            <h3>测试说明</h3>
+            <p>1. 选择下面的任意文本，工具栏会自动显示</p>
+            <p>2. 选择颜色和样式，点击"创建标记"</p>
+            <p>3. 点击已创建的标记可以查看信息</p>
+            <p>4. 点击"删除标记"可以删除选中的标记</p>
+        </div>
+        
+        <div id="test-content" class="test-section">
+            <h3>测试文本区域</h3>
+            <div id="epub-viewer" class="test-content">
+                <p>这是一段用于测试SVG标记功能的文本。您可以<strong>选择这段文字</strong>来测试高亮标记功能。</p>
+                <p>这里有<em>更多示例文本</em>用于测试不同的标记样式。您可以选择任意长度的文本进行标记。</p>
+                <p>这是第三段文本，您可以在这里<u>测试下划线样式</u>以及其他标记效果。</p>
+                <p>SVG标记功能支持多种颜色和样式，包括实线、虚线、波浪线等装饰效果。</p>
+                <p>最后一段文本用于测试标记的<strong>持久化</strong>和<em>交互功能</em>。</p>
+            </div>
+            
+            <div class="status" id="status">
+                准备就绪！请选择文本开始测试标记功能。
+            </div>
+        </div>
+        
+        <!-- 工具栏 -->
+        <div id="epub-marking-toolbar" class="toolbar">
+            <div class="color-palette">
+                <div class="color-btn" style="background-color: #ffeb3b" title="黄色" data-color="#ffeb3b"></div>
+                <div class="color-btn" style="background-color: #4caf50" title="绿色" data-color="#4caf50"></div>
+                <div class="color-btn" style="background-color: #2196f3" title="蓝色" data-color="#2196f3"></div>
+                <div class="color-btn" style="background-color: #e91e63" title="粉色" data-color="#e91e63"></div>
+                <div class="color-btn" style="background-color: #ff9800" title="橙色" data-color="#ff9800"></div>
+            </div>
+            <div class="style-buttons">
+                <button class="style-btn active" data-style="highlight">高亮</button>
+                <button class="style-btn" data-style="underline">下划线</button>
+                <button class="style-btn" data-style="dashed">虚线</button>
+                <button class="style-btn" data-style="wavy">波浪线</button>
+            </div>
+            <button class="action-btn create-btn" id="create-btn">创建标记</button>
+            <button class="action-btn delete-btn" id="delete-btn">删除标记</button>
+        </div>
+    </div>
+
+    <script type="module">
+        // 简化版的SVG标记管理器，用于测试
+        class SimpleSVGMarkManager {
+            constructor() {
+                this.svgContainer = null;
+                this.marks = new Map();
+                this.currentSelection = null;
+                this.toolbar = null;
+                this.selectedColor = '#ffeb3b';
+                this.selectedStyle = 'highlight';
+                this.markCounter = 0;
+                
+                this.init();
+            }
+            
+            init() {
+                this.createSVGContainer();
+                this.setupEventListeners();
+            }
+            
+            createSVGContainer() {
+                const viewer = document.getElementById('epub-viewer');
+                if (!viewer) return;
+                
+                // 设置viewer为相对定位
+                viewer.style.position = 'relative';
+                
+                // 创建SVG容器
+                this.svgContainer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                this.svgContainer.style.position = 'absolute';
+                this.svgContainer.style.top = '0';
+                this.svgContainer.style.left = '0';
+                this.svgContainer.style.width = '100%';
+                this.svgContainer.style.height = '100%';
+                this.svgContainer.style.pointerEvents = 'none';
+                this.svgContainer.style.zIndex = '1000';
+                
+                viewer.appendChild(this.svgContainer);
+            }
+            
+            setupEventListeners() {
+                // 文本选择事件
+                document.addEventListener('mouseup', (e) => {
+                    setTimeout(() => this.handleSelection(e), 10);
+                });
+                
+                document.addEventListener('selectionchange', () => {
+                    const selection = window.getSelection();
+                    if (!selection || selection.toString().trim().length === 0) {
+                        this.hideToolbar();
+                    }
+                });
+                
+                // 工具栏事件
+                document.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('color-btn')) {
+                        this.selectColor(e.target.dataset.color);
+                    } else if (e.target.classList.contains('style-btn')) {
+                        this.selectStyle(e.target.dataset.style);
+                    } else if (e.target.id === 'create-btn') {
+                        this.createMark();
+                    } else if (e.target.id === 'delete-btn') {
+                        this.deleteMarkAtSelection();
+                    } else if (!e.target.closest('#epub-marking-toolbar')) {
+                        this.hideToolbar();
+                    }
+                });
+            }
+            
+            handleSelection(event) {
+                const selection = window.getSelection();
+                if (!selection || selection.rangeCount === 0) return;
+                
+                const text = selection.toString().trim();
+                if (text.length === 0) return;
+                
+                const range = selection.getRangeAt(0);
+                this.currentSelection = { text, range };
+                this.showToolbar(event.clientX, event.clientY);
+            }
+            
+            showToolbar(x, y) {
+                const toolbar = document.getElementById('epub-marking-toolbar');
+                if (!toolbar) return;
+                
+                toolbar.style.left = `${x}px`;
+                toolbar.style.top = `${y + 10}px`;
+                toolbar.style.display = 'block';
+                
+                this.updateStatus(`已选择文本: "${this.currentSelection.text.substring(0, 20)}..."`);
+            }
+            
+            hideToolbar() {
+                const toolbar = document.getElementById('epub-marking-toolbar');
+                if (toolbar) {
+                    toolbar.style.display = 'none';
+                }
+            }
+            
+            selectColor(color) {
+                this.selectedColor = color;
+                document.querySelectorAll('.color-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.color === color);
+                });
+                this.updateStatus(`选择颜色: ${color}`);
+            }
+            
+            selectStyle(style) {
+                this.selectedStyle = style;
+                document.querySelectorAll('.style-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.style === style);
+                });
+                this.updateStatus(`选择样式: ${style}`);
+            }
+            
+            createMark() {
+                if (!this.currentSelection || !this.svgContainer) return;
+                
+                const markId = `mark-${++this.markCounter}`;
+                const mark = {
+                    id: markId,
+                    text: this.currentSelection.text,
+                    color: this.selectedColor,
+                    style: this.selectedStyle,
+                    created: new Date()
+                };
+                
+                // 创建SVG元素
+                const svgElement = this.createSVGElement(mark);
+                if (svgElement) {
+                    this.svgContainer.appendChild(svgElement);
+                    this.marks.set(markId, { ...mark, element: svgElement });
+                    
+                    // 清除选择
+                    window.getSelection()?.removeAllRanges();
+                    this.currentSelection = null;
+                    this.hideToolbar();
+                    
+                    this.updateStatus(`✅ 成功创建标记: ${mark.text.substring(0, 20)}... (样式: ${mark.style}, 颜色: ${mark.color})`);
+                }
+            }
+            
+            createSVGElement(mark) {
+                const range = this.currentSelection.range;
+                const rects = range.getClientRects();
+                
+                if (rects.length === 0) return null;
+                
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('data-mark-id', mark.id);
+                g.style.pointerEvents = 'auto';
+                g.style.cursor = 'pointer';
+                
+                const viewerRect = this.svgContainer.getBoundingClientRect();
+                
+                for (let i = 0; i < rects.length; i++) {
+                    const rect = rects[i];
+                    const svgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    
+                    svgRect.setAttribute('x', (rect.left - viewerRect.left).toString());
+                    svgRect.setAttribute('y', (rect.top - viewerRect.top).toString());
+                    svgRect.setAttribute('width', rect.width.toString());
+                    svgRect.setAttribute('height', rect.height.toString());
+                    
+                    this.applyStyleToElement(svgRect, mark, rect, viewerRect);
+                    g.appendChild(svgRect);
+                }
+                
+                // 点击事件
+                g.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.handleMarkClick(mark);
+                });
+                
+                return g;
+            }
+            
+            applyStyleToElement(element, mark, rect, viewerRect) {
+                switch (mark.style) {
+                    case 'highlight':
+                        element.setAttribute('fill', mark.color);
+                        element.setAttribute('fill-opacity', '0.7');
+                        element.setAttribute('rx', '2');
+                        break;
+                    case 'underline':
+                        element.setAttribute('fill', 'none');
+                        element.setAttribute('stroke', mark.color);
+                        element.setAttribute('stroke-width', '2');
+                        element.setAttribute('height', '2');
+                        element.setAttribute('y', (rect.bottom - viewerRect.top - 2).toString());
+                        break;
+                    case 'dashed':
+                        element.setAttribute('fill', 'none');
+                        element.setAttribute('stroke', mark.color);
+                        element.setAttribute('stroke-width', '2');
+                        element.setAttribute('stroke-dasharray', '5,5');
+                        element.setAttribute('height', '2');
+                        element.setAttribute('y', (rect.bottom - viewerRect.top - 2).toString());
+                        break;
+                    case 'wavy':
+                        element.setAttribute('fill', 'none');
+                        element.setAttribute('stroke', mark.color);
+                        element.setAttribute('stroke-width', '2');
+                        element.setAttribute('stroke-dasharray', '2,2');
+                        element.setAttribute('height', '2');
+                        element.setAttribute('y', (rect.bottom - viewerRect.top - 2).toString());
+                        break;
+                }
+            }
+            
+            handleMarkClick(mark) {
+                this.updateStatus(`📌 点击标记: "${mark.text}" (创建时间: ${mark.created.toLocaleTimeString()})`);
+            }
+            
+            deleteMarkAtSelection() {
+                if (this.currentSelection) {
+                    this.updateStatus('⚠️ 请先选择要删除标记的文本区域');
+                } else {
+                    // 简化实现：删除最近的标记
+                    if (this.marks.size > 0) {
+                        const firstMarkId = this.marks.keys().next().value;
+                        const markData = this.marks.get(firstMarkId);
+                        if (markData && markData.element) {
+                            this.svgContainer.removeChild(markData.element);
+                            this.marks.delete(firstMarkId);
+                            this.updateStatus(`🗑️ 删除标记: ${markData.text.substring(0, 20)}...`);
+                        }
+                    } else {
+                        this.updateStatus('📭 没有可删除的标记');
+                    }
+                }
+            }
+            
+            updateStatus(message) {
+                const status = document.getElementById('status');
+                if (status) {
+                    status.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+                }
+            }
+        }
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            new SimpleSVGMarkManager();
+        });
+    </script>
+</body>
+</html>

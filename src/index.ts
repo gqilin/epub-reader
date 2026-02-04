@@ -1,4 +1,6 @@
 export { EpubReader } from './EpubReader';
+export { SVGMarkManager } from './SVGMarkManager';
+export { SimpleCFIProvider } from './SimpleCFIProvider';
 export * from './types';
 
 import { EpubReader } from './EpubReader';

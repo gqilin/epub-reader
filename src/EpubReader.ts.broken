@@ -297,7 +297,7 @@ class ToolbarManager {
     if (!this.element) return;
     
     // 颜色选择
-    const colorButtons = this.element.querySelectorAll('.color-btn') as NodeListOf<HTMLElement>;
+    const colorButtons = this.element.querySelectorAll('.color-btn');
     colorButtons.forEach(btn => {
       btn.addEventListener('click', () => {
         colorButtons.forEach(b => b.style.border = '1px solid #ddd');
@@ -611,6 +611,157 @@ class CFIParser {
   }
 }
 
+// 标记高亮渲染器
+class AnnotationRenderer {
+  private static annotationElements: Map<string, HTMLElement> = new Map();
+  
+  static renderAnnotation(annotation: Annotation): HTMLElement {
+    // 如果已存在，先移除
+    this.removeAnnotation(annotation.id);
+    
+    const span = document.createElement('span');
+    span.className = 'epub-annotation';
+    span.setAttribute('data-annotation-id', annotation.id);
+    span.setAttribute('data-cfi', annotation.cfi);
+    
+    // 应用样式
+    this.applyStyles(span, annotation.style);
+    
+    // 添加标题（用于悬停显示）
+    span.title = this.createTooltip(annotation);
+    
+    // 添加点击事件
+    span.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.handleAnnotationClick(annotation, e);
+    });
+    
+    this.annotationElements.set(annotation.id, span);
+    return span;
+  }
+  
+  private static applyStyles(element: HTMLElement, style: AnnotationStyle): void {
+    const css: any = {};
+    
+    // 背景颜色
+    if (style.backgroundColor) {
+      css.backgroundColor = style.backgroundColor;
+    }
+    
+    // 文字颜色
+    if (style.color) {
+      css.color = style.color;
+    }
+    
+    // 文本装饰
+    if (style.textDecoration) {
+      css.textDecoration = style.textDecoration;
+    }
+    
+    // 边框样式
+    if (style.borderStyle) {
+      if (style.borderStyle === 'wavy') {
+        css.borderBottom = `${style.borderWidth || 2}px wavy ${style.borderColor || '#000'}`;
+        css.textDecoration = 'underline';
+      } else if (style.borderStyle === 'dashed') {
+        css.borderBottom = `${style.borderWidth || 2}px dashed ${style.borderColor || '#000'}`;
+      } else if (style.borderStyle === 'dotted') {
+        css.borderBottom = `${style.borderWidth || 2}px dotted ${style.borderColor || '#000'}`;
+      } else if (style.borderStyle === 'double') {
+        css.borderBottom = `${style.borderWidth || 2}px double ${style.borderColor || '#000'}`;
+      } else {
+        css.borderBottom = `${style.borderWidth || 2}px ${style.borderStyle || 'solid'} ${style.borderColor || '#000'}`;
+      }
+    }
+    
+    // 内边距
+    if (style.padding) {
+      css.padding = `${style.padding}px`;
+    }
+    
+    // 外边距
+    if (style.margin) {
+      css.margin = `${style.margin}px`;
+    }
+    
+    // 字体粗细
+    if (style.fontWeight) {
+      css.fontWeight = style.fontWeight;
+    }
+    
+    // 字体样式
+    if (style.fontStyle) {
+      css.fontStyle = style.fontStyle;
+    }
+    
+    // 透明度
+    if (style.opacity) {
+      css.opacity = style.opacity;
+    }
+    
+    // 边框圆角
+    if (style.borderRadius) {
+      css.borderRadius = `${style.borderRadius}px`;
+    }
+    
+    // 过渡效果
+    css.transition = 'all 0.2s ease';
+    
+    // 鼠标样式
+    css.cursor = 'pointer';
+    
+    // 应用所有样式
+    Object.assign(element.style, css);
+  }
+  
+  private static createTooltip(annotation: Annotation): string {
+    let tooltip = `标记时间: ${annotation.created.toLocaleString()}\n`;
+    
+    if (annotation.note) {
+      tooltip += `备注: ${annotation.note}\n`;
+    }
+    
+    tooltip += `文本: "${annotation.selectedText}"`;
+    
+    return tooltip;
+  }
+  
+  private static handleAnnotationClick(annotation: Annotation, event: Event): void {
+    // 触发自定义事件，让外部处理
+    const customEvent = new CustomEvent('annotationClick', {
+      detail: { annotation, event }
+    });
+    document.dispatchEvent(customEvent);
+  }
+  
+  static removeAnnotation(annotationId: string): void {
+    const element = this.annotationElements.get(annotationId);
+    if (element) {
+      const parent = element.parentNode;
+      if (parent) {
+        // 将内容移出标记元素
+        while (element.firstChild) {
+          parent.insertBefore(element.firstChild, element);
+        }
+        parent.removeChild(element);
+      }
+      this.annotationElements.delete(annotationId);
+    }
+  }
+  
+  static clearAllAnnotations(): void {
+    this.annotationElements.forEach((element, id) => {
+      this.removeAnnotation(id);
+    });
+    this.annotationElements.clear();
+  }
+  
+  static getAnnotationElement(annotationId: string): HTMLElement | null {
+    return this.annotationElements.get(annotationId) || null;
+  }
+}
+
 // 标记管理器
 class AnnotationManagerImpl implements AnnotationManager {
   public annotations: Map<string, Annotation> = new Map();
@@ -822,9 +973,240 @@ class AnnotationManagerImpl implements AnnotationManager {
   }
 }
 
+// 工具栏管理器
+class ToolbarManager {
+  private element: HTMLElement | null = null;
+  private isVisible: boolean = false;
+  private onToggleCallback?: (visible: boolean) => void;
+  
+  constructor(elementId: string, onToggle?: (visible: boolean) => void) {
+    this.element = document.getElementById(elementId);
+    this.onToggleCallback = onToggle;
+    this.initializeToolbar();
+  }
+  
+  show(): void {
+    if (this.element) {
+      this.element.style.display = 'flex';
+      this.isVisible = true;
+      this.onToggleCallback?.(true);
+    }
+  }
+  
+  hide(): void {
+    if (this.element) {
+      this.element.style.display = 'none';
+      this.isVisible = false;
+      this.onToggleCallback?.(false);
+    }
+  }
+  
+  toggle(): void {
+    if (this.isVisible) {
+      this.hide();
+    } else {
+      this.show();
+    }
+  }
+  
+  isVisible(): boolean {
+    return this.isVisible;
+  }
+  
+  updateSelectionInfo(selectionInfo: SelectedTextInfo | null): void {
+    if (!this.element) return;
+    
+    const selectionTextEl = this.element.querySelector('.selection-text');
+    const cfiDisplayEl = this.element.querySelector('.cfi-display');
+    
+    if (selectionInfo) {
+      if (selectionTextEl) {
+        selectionTextEl.textContent = `选中: ${selectionInfo.text.substring(0, 50)}${selectionInfo.text.length > 50 ? '...' : ''}`;
+      }
+      if (cfiDisplayEl) {
+        cfiDisplayEl.textContent = `CFI: ${selectionInfo.cfi.substring(0, 50)}${selectionInfo.cfi.length > 50 ? '...' : ''}`;
+      }
+    } else {
+      if (selectionTextEl) selectionTextEl.textContent = '';
+      if (cfiDisplayEl) cfiDisplayEl.textContent = '';
+    }
+  }
+  
+  private initializeToolbar(): void {
+    if (!this.element) return;
+    
+    // 初始隐藏
+    this.element.style.display = 'none';
+    
+    // 设置基础样式
+    this.element.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 20px;
+      transform: translateY(-50%);
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 1rem;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      z-index: 10000;
+      flex-direction: column;
+      gap: 0.5rem;
+      min-width: 250px;
+      font-size: 14px;
+    `;
+    
+    // 创建工具栏内容
+    this.element.innerHTML = `
+      <div class="toolbar-header">
+        <h3 style="margin: 0; font-size: 16px;">文本标记</h3>
+        <button class="close-btn" onclick="this.parentElement.parentElement.style.display='none'">×</button>
+      </div>
+      <div class="selection-text" style="color: #666; font-size: 12px; min-height: 16px;"></div>
+      <div class="cfi-display" style="color: #888; font-size: 11px; font-family: monospace; word-break: break-all;"></div>
+      <div class="color-picker">
+        <div style="margin-bottom: 0.5rem;">选择颜色:</div>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <button class="color-btn" data-color="#ffeb3b" style="background: #ffeb3b; width: 30px; height: 30px; border: 1px solid #ddd; cursor: pointer; border-radius: 4px;"></button>
+          <button class="color-btn" data-color="#28a745" style="background: #28a745; width: 30px; height: 30px; border: 1px solid #ddd; cursor: pointer; border-radius: 4px;"></button>
+          <button class="color-btn" data-color="#007bff" style="background: #007bff; width: 30px; height: 30px; border: 1px solid #ddd; cursor: pointer; border-radius: 4px;"></button>
+          <button class="color-btn" data-color="#ff69b4" style="background: #ff69b4; width: 30px; height: 30px; border: 1px solid #ddd; cursor: pointer; border-radius: 4px;"></button>
+        </div>
+      </div>
+      <div class="style-options">
+        <div style="margin-bottom: 0.5rem;">样式选项:</div>
+        <select class="style-select" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+          <option value="highlight">高亮背景</option>
+          <option value="underline">下划线</option>
+          <option value="dashed">虚线</option>
+          <option value="dotted">点线</option>
+          <option value="wavy">波浪线</option>
+          <option value="double">双线</option>
+        </select>
+      </div>
+      <button class="create-annotation" style="background: #007bff; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; width: 100%;">
+        创建标记
+      </button>
+    `;
+    
+    // 绑定事件
+    this.bindEvents();
+  }
+  
+  private bindEvents(): void {
+    if (!this.element) return;
+    
+    // 颜色选择
+    const colorButtons = this.element.querySelectorAll('.color-btn');
+    colorButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        colorButtons.forEach(b => b.style.border = '1px solid #ddd');
+        btn.style.border = '2px solid #007bff';
+        this.selectedColor = btn.getAttribute('data-color') || '#ffeb3b';
+      });
+    });
+    
+    // 创建标记按钮
+    const createBtn = this.element.querySelector('.create-annotation');
+    if (createBtn) {
+      createBtn.addEventListener('click', () => {
+        this.onCreateAnnotation?.();
+      });
+    }
+  }
+  
+  public selectedColor: string = '#ffeb3b';
+  public selectedStyle: string = 'highlight';
+  public onCreateAnnotation?: () => void;
+}
 
-
-
+// CFI高亮管理器
+class CFIHighlighter {
+  private static highlights: Map<string, HTMLElement> = new Map();
+  
+  static highlight(targetElement: Element, cfi: string, duration: number = 2000): void {
+    // 移除之前的高亮
+    this.clearHighlights();
+    
+    // 创建高亮元素
+    const highlight = document.createElement('div');
+    highlight.style.cssText = `
+      position: absolute;
+      background: rgba(255, 235, 59, 0.3);
+      border: 2px solid #fbbf24;
+      border-radius: 2px;
+      pointer-events: none;
+      z-index:1000;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(251, 191, 36, 0.3);
+    `;
+    
+    // 获取元素位置
+    const rect = targetElement.getBoundingClientRect();
+    const containerRect = targetElement.parentElement?.getBoundingClientRect();
+    
+    if (containerRect) {
+      highlight.style.top = `${rect.top - containerRect.top}px`;
+      highlight.style.left = `${rect.left - containerRect.left}px`;
+      highlight.style.width = `${rect.width}px`;
+      highlight.style.height = `${rect.height}px`;
+    }
+    
+    // 添加高亮到容器
+    targetElement.parentElement?.appendChild(highlight);
+    this.highlights.set(cfi, highlight);
+    
+    // 自动移除高亮
+    setTimeout(() => {
+      this.removeHighlight(cfi);
+    }, duration);
+  }
+  
+  static removeHighlight(cfi: string): void {
+    const highlight = this.highlights.get(cfi);
+    if (highlight && highlight.parentNode) {
+      highlight.parentNode.removeChild(highlight);
+      this.highlights.delete(cfi);
+    }
+  }
+  
+  static clearHighlights(): void {
+    this.highlights.forEach(highlight => {
+      if (highlight.parentNode) {
+        highlight.parentNode.removeChild(highlight);
+      }
+    });
+    this.highlights.clear();
+  }
+}
+    
+    // 添加高亮到容器
+    targetElement.parentElement?.appendChild(highlight);
+    this.highlights.set(cfi, highlight);
+    
+    // 自动移除高亮
+    setTimeout(() => {
+      this.removeHighlight(cfi);
+    }, duration);
+  }
+  
+  static removeHighlight(cfi: string): void {
+    const highlight = this.highlights.get(cfi);
+    if (highlight && highlight.parentNode) {
+      highlight.parentNode.removeChild(highlight);
+      this.highlights.delete(cfi);
+    }
+  }
+  
+  static clearHighlights(): void {
+    this.highlights.forEach(highlight => {
+      if (highlight.parentNode) {
+        highlight.parentNode.removeChild(highlight);
+      }
+    });
+    this.highlights.clear();
+  }
+}
 
 export class EpubReader {
   private zip: JSZip | null = null;
@@ -1642,33 +2024,11 @@ export class EpubReader {
     }
 
     // 等待DOM元素存在（最多等待2秒）
-    let targetElement = await this.waitForElement(targetId, 2000);
-    
-    // 如果元素不存在，自动创建它
+    const targetElement = await this.waitForElement(targetId, 2000);
     if (!targetElement) {
-      console.warn(`目标元素不存在: #${targetId}，正在自动创建...`);
-      targetElement = document.createElement('div');
-      targetElement.id = targetId;
-      targetElement.className = className;
-      
-      // 添加基本样式确保元素可见
-      targetElement.style.cssText = `
-        width: 100%;
-        min-height: 100vh;
-        padding: 20px;
-        box-sizing: border-box;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        line-height: 1.6;
-        background: #fff;
-      `;
-      
-      // 如果有body，添加到body末尾；否则添加到document中
-      if (document.body) {
-        document.body.appendChild(targetElement);
-      } else {
-        document.appendChild(targetElement);
-      }
-      console.log(`已自动创建目标元素: #${targetId}`);
+      const error = new Error(`目标元素不存在: #${targetId}，请确保DOM元素已创建`);
+      onError?.(error);
+      throw error;
     }
 
     // 保存当前使用的元素ID
