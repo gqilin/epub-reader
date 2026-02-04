@@ -18,9 +18,8 @@
     
     <div class="content-container">
       <!-- 章节内容现在由父组件App.vue提供 -->
-      <div class="chapter-placeholder">
-        <p>章节内容将在下方显示</p>
-      </div>
+      <!-- 章节内容容器，始终存在但为空 -->
+        <div id="epub-chapter-container" class="chapter-render-area"></div>
     </div>
     
     <div class="viewer-footer">

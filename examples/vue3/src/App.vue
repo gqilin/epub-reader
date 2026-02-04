@@ -12,8 +12,7 @@
         <EpubInfo v-if="reader" :reader="reader" @chapter-selected="onChapterSelected" />
         <EpubViewer v-if="reader" :reader="reader" />
         
-        <!-- 章节内容容器，始终存在但为空 -->
-        <div v-if="reader" id="epub-chapter-container" class="chapter-render-area"></div>
+        
       </div>
     </main>
   </div>
