@@ -2130,13 +2130,15 @@ export class EpubReader {
       className?: string;
       onError?: (error: Error) => void;
       onSuccess?: () => void;
+      renderAnnotations?: boolean; // 新增：是否渲染标记
     } = {}
   ): Promise<void> {
     const {
       showLoading = true,
       className = 'epub-chapter-content',
       onError,
-      onSuccess
+      onSuccess,
+      renderAnnotations = true // 默认渲染标记
     } = options;
 
     // 确定目标元素ID
@@ -2179,6 +2181,13 @@ export class EpubReader {
       // 处理交互
       this.setupChapterInteractions(targetId, chapterIndex);
 
+      // 渲染当前章节的标记
+      if (renderAnnotations && this.annotationOptions) {
+        setTimeout(() => {
+          this.renderCurrentChapterAnnotations();
+        }, 100); // 延迟渲染，确保DOM完全加载
+      }
+
       onSuccess?.();
     } catch (error) {
       const errorMsg = error instanceof Error ? error : new Error(String(error));
@@ -2199,6 +2208,7 @@ export class EpubReader {
       className?: string;
       onError?: (error: Error) => void;
       onSuccess?: () => void;
+      renderAnnotations?: boolean;
     }
   ): Promise<void> {
     const chapters = this.getChapters();
@@ -2209,7 +2219,10 @@ export class EpubReader {
     }
 
     this.currentChapterIndex = chapterIndex;
-    return this.renderChapter(chapterIndex, elementId, options);
+    return this.renderChapter(chapterIndex, elementId, {
+      ...options,
+      renderAnnotations: options?.renderAnnotations !== false // 默认为true
+    });
   }
 
   /**
@@ -2223,6 +2236,7 @@ export class EpubReader {
       className?: string;
       onError?: (error: Error) => void;
       onSuccess?: () => void;
+      renderAnnotations?: boolean;
     }
   ): Promise<void> {
     const chapters = this.getChapters();
@@ -2233,7 +2247,10 @@ export class EpubReader {
     }
 
     this.currentChapterIndex = chapterIndex;
-    return this.renderChapter(chapterIndex, elementId, options);
+    return this.renderChapter(chapterIndex, elementId, {
+      ...options,
+      renderAnnotations: options?.renderAnnotations !== false // 默认为true
+    });
   }
 
   /**
@@ -2245,6 +2262,7 @@ export class EpubReader {
     className?: string;
     onError?: (error: Error) => void;
     onSuccess?: () => void;
+    renderAnnotations?: boolean;
   }): Promise<void> {
     const chapters = this.getChapters();
     const newIndex = this.currentChapterIndex - 1;
@@ -2253,7 +2271,10 @@ export class EpubReader {
       throw new Error('已经是第一章了');
     }
 
-    return this.renderChapter(newIndex, undefined, options);
+    return this.renderChapter(newIndex, undefined, {
+      ...options,
+      renderAnnotations: options?.renderAnnotations !== false // 默认为true
+    });
   }
 
   /**
@@ -2265,6 +2286,7 @@ export class EpubReader {
     className?: string;
     onError?: (error: Error) => void;
     onSuccess?: () => void;
+    renderAnnotations?: boolean;
   }): Promise<void> {
     const chapters = this.getChapters();
     const newIndex = this.currentChapterIndex + 1;
@@ -2273,7 +2295,10 @@ export class EpubReader {
       throw new Error('已经是最后一章了');
     }
 
-    return this.renderChapter(newIndex, undefined, options);
+    return this.renderChapter(newIndex, undefined, {
+      ...options,
+      renderAnnotations: options?.renderAnnotations !== false // 默认为true
+    });
   }
 
   /**

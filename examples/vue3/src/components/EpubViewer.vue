@@ -23,6 +23,9 @@
         <button @click="showAnnotationList" class="annotation-list-btn" v-if="annotationsEnabled">
           📋 列表
         </button>
+        <button @click="showDebugInfo" class="debug-btn" v-if="annotationsEnabled">
+          🐛 调试
+        </button>
       </div>
     </div>
     
@@ -81,6 +84,57 @@
       </div>
     </div>
     
+    <!-- 调试信息弹窗 -->
+    <div v-if="showDebugModal" class="annotation-modal" @click.self="closeDebugModal">
+      <div class="annotation-modal-content debug-modal">
+        <div class="annotation-modal-header">
+          <h3>🐛 标记调试信息</h3>
+          <button @click="closeDebugModal" class="close-btn">×</button>
+        </div>
+        <div class="annotation-modal-body">
+          <div class="debug-section">
+            <h4>存储统计</h4>
+            <div class="debug-info">
+              <p><strong>总标记数：</strong> {{ debugStats.count }}</p>
+              <p><strong>存储大小：</strong> {{ (debugStats.size / 1024).toFixed(2) }} KB</p>
+              <p><strong>最后修改：</strong> {{ debugStats.lastModified || '无' }}</p>
+            </div>
+          </div>
+          
+          <div class="debug-section">
+            <h4>当前章节标记</h4>
+            <div class="debug-info">
+              <p><strong>章节ID：</strong> {{ currentChapterId || '未知' }}</p>
+              <p><strong>当前章节数：</strong> {{ currentAnnotations.length }}</p>
+            </div>
+          </div>
+          
+          <div class="debug-section">
+            <h4>标记分类统计</h4>
+            <div class="debug-info">
+              <p><strong>🟨 高亮：</strong> {{ getTypeCount('highlight') }} 个</p>
+              <p><strong>U̲ 下划线：</strong> {{ getTypeCount('underline') }} 个</p>
+              <p><strong>📝 笔记：</strong> {{ getTypeCount('note') }} 个</p>
+              <p><strong>🔖 书签：</strong> {{ getTypeCount('bookmark') }} 个</p>
+            </div>
+          </div>
+          
+          <div class="debug-section">
+            <h4>原始数据</h4>
+            <div class="debug-json">
+              <pre>{{ JSON.stringify(annotations, null, 2) }}</pre>
+            </div>
+          </div>
+        </div>
+        <div class="annotation-modal-footer">
+          <button @click="clearAllAnnotations" class="danger-btn">🗑️ 清空所有标记</button>
+          <button @click="forceRerenderAnnotations" class="rerender-btn">🔄 重新渲染</button>
+          <button @click="exportDebugData" class="export-btn">💾 导出调试数据</button>
+          <button @click="refreshDebugInfo" class="refresh-btn">📊 刷新统计</button>
+        </div>
+      </div>
+    </div>
+    
     <div class="viewer-footer">
       <span>Chapter {{ currentChapterIndex + 1 }} of {{ chapters.length }}</span>
       <span v-if="annotationsEnabled && annotations.length > 0" class="annotation-count">
@@ -108,12 +162,20 @@ const hasNextChapter = ref(props.reader.hasNextChapter());
 // 标记功能相关状态
 const annotationsEnabled = ref(false);
 const showAnnotationModal = ref(false);
+const showDebugModal = ref(false);
 const annotations = ref<Annotation[]>([]);
+const debugStats = ref({ count: 0, size: 0, lastModified: null as string | null });
 
 // 计算当前章节的标记
 const currentAnnotations = computed(() => {
   const currentChapter = chapters.value[currentChapterIndex.value];
   return annotations.value.filter(ann => ann.chapterId === currentChapter?.id);
+});
+
+// 计算当前章节ID
+const currentChapterId = computed(() => {
+  const currentChapter = chapters.value[currentChapterIndex.value];
+  return currentChapter?.id || 'unknown';
 });
 
 const onPreviousChapter = async () => {
@@ -183,9 +245,15 @@ const updateNavigationState = () => {
   hasPreviousChapter.value = props.reader.hasPreviousChapter();
   hasNextChapter.value = props.reader.hasNextChapter();
   
-  // 更新标记列表
+  // 更新标记列表并重新渲染当前章节的标记
   if (annotationsEnabled.value) {
     loadAnnotations();
+    // 重新渲染当前章节的标记
+    setTimeout(() => {
+      props.reader.getAnnotationManager().on('reloaded', () => {
+        console.log('标记重新加载完成');
+      });
+    }, 200);
   }
 };
 
@@ -247,6 +315,12 @@ onUnmounted(() => {
 const initializeAnnotations = () => {
   if (!annotationsEnabled.value) return;
   
+  // 先清理现有的SVG覆盖层（如果有）
+  const existingSvg = document.querySelector('.epub-annotation-overlay');
+  if (existingSvg) {
+    existingSvg.remove();
+  }
+  
   props.reader.setupAnnotations({
     containerId: 'epub-chapter-container',
     toolbarId: 'annotation-toolbar',
@@ -256,6 +330,15 @@ const initializeAnnotations = () => {
   });
   
   loadAnnotations();
+  
+  // 延迟渲染当前章节的标记，确保DOM已经完全加载
+  setTimeout(() => {
+    const currentChapter = chapters.value[currentChapterIndex.value];
+    if (currentChapter) {
+      const chapterAnnotations = props.reader.getAnnotations(currentChapter.id);
+      console.log(`重新渲染章节 ${currentChapter.id} 的 ${chapterAnnotations.length} 个标记`);
+    }
+  }, 300);
 };
 
 /**
@@ -421,6 +504,156 @@ const showAnnotationList = () => {
  */
 const closeAnnotationModal = () => {
   showAnnotationModal.value = false;
+};
+
+/**
+ * 显示调试信息
+ */
+const showDebugInfo = () => {
+  updateDebugStats();
+  showDebugModal.value = true;
+};
+
+/**
+ * 关闭调试弹窗
+ */
+const closeDebugModal = () => {
+  showDebugModal.value = false;
+};
+
+/**
+ * 更新调试统计信息
+ */
+const updateDebugStats = () => {
+  try {
+    // 从localStorage获取原始数据
+    const data = localStorage.getItem('epub-annotations');
+    if (data) {
+      const parsed = JSON.parse(data);
+      debugStats.value = {
+        count: Array.isArray(parsed.annotations) ? parsed.annotations.length : 0,
+        size: data.length,
+        lastModified: parsed.timestamp || null
+      };
+    } else {
+      debugStats.value = { count: 0, size: 0, lastModified: null };
+    }
+  } catch (error) {
+    console.error('获取调试统计失败:', error);
+    debugStats.value = { count: 0, size: 0, lastModified: null };
+  }
+};
+
+/**
+ * 获取特定类型的标记数量
+ */
+const getTypeCount = (type: AnnotationType): number => {
+  return annotations.value.filter(ann => ann.type === type).length;
+};
+
+/**
+ * 导出调试数据
+ */
+const exportDebugData = () => {
+  try {
+    const debugData = {
+      timestamp: new Date().toISOString(),
+      stats: debugStats.value,
+      annotations: annotations.value,
+      currentChapter: {
+        id: currentChapterId.value,
+        index: currentChapterIndex.value,
+        annotations: currentAnnotations.value
+      },
+      localStorage: {
+        'epub-annotations': localStorage.getItem('epub-annotations'),
+        keys: Object.keys(localStorage).filter(key => key.startsWith('epub-'))
+      }
+    };
+    
+    const blob = new Blob([JSON.stringify(debugData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `epub-debug-${new Date().toISOString().split('T')[0]}-${Date.now()}.json`;
+    a.click();
+    
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('导出调试数据失败:', error);
+    alert('导出调试数据失败: ' + (error instanceof Error ? error.message : String(error)));
+  }
+};
+
+/**
+ * 清空所有标记数据
+ */
+const clearAllAnnotations = () => {
+  if (confirm('⚠️ 这将清空所有标记数据，包括本地存储的数据！\n\n确定要继续吗？')) {
+    try {
+      // 清空localStorage中的标记数据
+      localStorage.removeItem('epub-annotations');
+      
+      // 清空内存中的数据
+      annotations.value = [];
+      
+      // 清空SVG覆盖层
+      if (props.reader && annotationsEnabled.value) {
+        // 重新初始化以清除SVG层
+        initializeAnnotations();
+      }
+      
+      // 更新调试信息
+      updateDebugStats();
+      
+      alert('✅ 所有标记数据已清空！');
+      closeDebugModal();
+    } catch (error) {
+      console.error('清空标记数据失败:', error);
+      alert('清空标记数据失败: ' + (error instanceof Error ? error.message : String(error)));
+    }
+  }
+};
+
+/**
+ * 刷新调试信息
+ */
+const refreshDebugInfo = () => {
+  loadAnnotations();
+  updateDebugStats();
+};
+
+/**
+ * 强制重新渲染所有标记
+ */
+const forceRerenderAnnotations = () => {
+  if (!annotationsEnabled.value || !props.reader) return;
+  
+  try {
+    console.log('🔄 强制重新渲染所有标记...');
+    
+    // 清理现有的SVG覆盖层
+    const existingSvg = document.querySelector('.epub-annotation-overlay');
+    if (existingSvg) {
+      existingSvg.remove();
+    }
+    
+    // 重新初始化标记功能
+    setTimeout(() => {
+      initializeAnnotations();
+      
+      // 显示成功消息
+      setTimeout(() => {
+        console.log('✅ 标记重新渲染完成');
+        alert(`✅ 重新渲染完成！\n当前章节有 ${currentAnnotations.value.length} 个标记`);
+      }, 500);
+    }, 100);
+    
+  } catch (error) {
+    console.error('强制重新渲染失败:', error);
+    alert('❌ 重新渲染失败: ' + (error instanceof Error ? error.message : String(error)));
+  }
 };
 
 /**
@@ -616,6 +849,21 @@ defineExpose({
 
 .annotation-list-btn:hover {
   background: #138496;
+}
+
+.debug-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background-color 0.2s;
+}
+
+.debug-btn:hover {
+  background: #5a6268;
 }
 
 /* 工具栏样式 */
@@ -865,6 +1113,95 @@ defineExpose({
   font-weight: 600;
 }
 
+/* 调试模式样式 */
+.debug-modal {
+  max-width: 800px;
+  max-height: 90vh;
+}
+
+.debug-section {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #dee2e6;
+}
+
+.debug-section h4 {
+  margin: 0 0 1rem 0;
+  color: #495057;
+  font-size: 1rem;
+  border-bottom: 2px solid #007bff;
+  padding-bottom: 0.5rem;
+}
+
+.debug-info {
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+}
+
+.debug-info p {
+  margin: 0.5rem 0;
+  padding: 0.25rem 0;
+}
+
+.debug-json {
+  max-height: 300px;
+  overflow-y: auto;
+  background: #2d3748;
+  color: #e2e8f0;
+  padding: 1rem;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.danger-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.danger-btn:hover {
+  background: #c82333;
+}
+
+.refresh-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.refresh-btn:hover {
+  background: #5a6268;
+}
+
+.rerender-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.rerender-btn:hover {
+  background: #218838;
+}
+
 /* 移动端适配 */
 @media (max-width: 768px) {
   .viewer-header {
@@ -883,11 +1220,18 @@ defineExpose({
   .annotation-controls {
     width: 100%;
     justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.25rem;
   }
   
   .annotation-modal-content {
     width: 95%;
     max-height: 90vh;
+  }
+  
+  .debug-modal {
+    width: 98%;
+    max-height: 95vh;
   }
   
   .annotation-item {
