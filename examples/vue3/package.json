@@ -8,9 +8,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
     "@types/jszip": "^3.4.0",
+    "element-plus": "^2.13.2",
     "jszip": "^3.10.1",
-    "vue": "^3.3.8"
+    "sass": "^1.97.3",
+    "vue": "^3.3.8",
+    "vue-router": "^4.6.4"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^4.5.0",

@@ -443,9 +443,12 @@ import { EpubReader, EpubChapter, Annotation, AnnotationType, ReadingStyles } fr
 
 interface Props {
   reader: EpubReader;
+  theme?: string;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  theme: 'light'
+});
 
 const chapters = ref<EpubChapter[]>(props.reader.getChapters());
 const currentChapterIndex = ref(props.reader.getCurrentChapterIndex());

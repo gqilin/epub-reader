@@ -7,21 +7,28 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
-      // 配置主项目src目录的别名
       'epub-reader-src': resolve(__dirname, '../../src'),
     },
+    extensions: ['.ts', '.js', '.vue', '.json']
   },
   define: {
     global: 'globalThis',
   },
+
   optimizeDeps: {
-    include: ['jszip', 'xml2js'],
-    // 强制包含主项目的依赖
+    include: ['jszip', 'xml2js', 'vue', 'element-plus'],
   },
   server: {
     port: 3000,
+    host: true
   },
   build: {
-    target: ['es2015', 'chrome58', 'firefox57', 'safari11'],
+    target: 'es2015',
+    rollupOptions: {
+      external: [],
+      output: {
+        manualChunks: undefined
+      }
+    }
   },
 });

@@ -1,0 +1,147 @@
+// 全局样式
+:root {
+  --primary-color: #409eff;
+  --background-color: #f5f5f5;
+  --sidebar-width: 280px;
+  --right-sidebar-width: 300px;
+  --header-height: 60px;
+  --border-color: #e4e7ed;
+  --text-primary: #303133;
+  --text-regular: #606266;
+  --text-secondary: #909399;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--background-color);
+  color: var(--text-primary);
+}
+
+#app {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+// 布局容器
+.layout-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+}
+
+// 顶部导航栏
+.layout-header {
+  height: var(--header-height);
+  background: white;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+}
+
+// 主内容区域
+.layout-main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+// 左侧目录
+.layout-sidebar-left {
+  width: var(--sidebar-width);
+  background: white;
+  border-right: 1px solid var(--border-color);
+  overflow-y: auto;
+  transition: transform 0.3s ease;
+}
+
+// 中间内容区域
+.layout-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: white;
+}
+
+// 右侧边栏
+.layout-sidebar-right {
+  width: var(--right-sidebar-width);
+  background: white;
+  border-left: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.3s ease;
+}
+
+// 电子书阅读区域
+.epub-reader-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  background: #fafafa;
+}
+
+// 响应式设计
+@media (max-width: 1200px) {
+  .layout-sidebar-right {
+    position: absolute;
+    right: 0;
+    top: var(--header-height);
+    height: calc(100vh - var(--header-height));
+    transform: translateX(100%);
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
+    z-index: 50;
+  }
+  
+  .layout-sidebar-right.show {
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .layout-sidebar-left {
+    position: absolute;
+    left: 0;
+    top: var(--header-height);
+    height: calc(100vh - var(--header-height));
+    transform: translateX(-100%);
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+    z-index: 50;
+  }
+  
+  .layout-sidebar-left.show {
+    transform: translateX(0);
+  }
+}
+
+// 自定义滚动条
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+  
+  &:hover {
+    background: #a8a8a8;
+  }
+}
