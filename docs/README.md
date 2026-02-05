@@ -18,6 +18,13 @@
 - **[元数据](./guide/metadata.md)** - 元数据处理
 - **[资源管理](./guide/resources.md)** - 资源文件处理
 
+### 📋 项目文档
+- **[样式功能测试指南](./STYLE_FEATURE_TEST.md)** - 样式功能的完整测试指南和API参考
+- **[项目结构整理](./PROJECT_STRUCTURE.md)** - 项目结构整理完成总结
+- **[更新日志](./CHANGELOG.md)** - 项目版本更新历史
+- **[示例项目说明](./examples-README.md)** - 示例项目的详细说明
+- **[GitHub文档](./github-README.md)** - GitHub相关文档
+
 ## 🎨 主要功能
 
 ### 标记系统
