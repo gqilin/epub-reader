@@ -9,7 +9,7 @@
         :data="tocData"
         :props="defaultProps"
         node-key="id"
-        :default-expand-all="false"
+        :default-expand-all="true"
         :expand-on-click-node="false"
         @node-click="handleNodeClick"
         class="toc-tree"
@@ -48,25 +48,9 @@ const tocData = ref<TreeNode[]>([])
 
 const defaultProps = {
   children: 'children',
-  label: 'label'
+  label: 'title'
 }
 
-const convertTocToTreeData = (toc: EpubTableOfContents[], prefix = ''): TreeNode[] => {
-  return toc.map((item, index) => {
-    const label = `${prefix}${index + 1}. ${item.title}`
-    const node: TreeNode = {
-      id: item.href || `toc-${index}`,
-      label,
-      chapter: item
-    }
-    
-    if (item.subitems && item.subitems.length > 0) {
-      node.children = convertTocToTreeData(item.subitems, `${prefix}${index + 1}.`)
-    }
-    
-    return node
-  })
-}
 
 const handleNodeClick = (data: TreeNode) => {
   if (data.chapter && data.chapter.href) {
@@ -77,7 +61,8 @@ const handleNodeClick = (data: TreeNode) => {
 onMounted(async () => {
   try {
     const toc = await props.reader.getTableOfContents()
-    tocData.value = convertTocToTreeData(toc)
+    console.log('Table of contents:', toc)
+    tocData.value = toc
   } catch (error) {
     ElMessage.error('获取目录失败')
     console.error('Failed to get table of contents:', error)
@@ -94,19 +79,20 @@ onMounted(async () => {
 
 .toc-header {
   padding: 16px;
-  border-bottom: 1px solid var(--border-color);
-  background: #fafafa;
+  border-bottom: 1px solid #e1e8ed;
+  background: #ffffff;
   
   h3 {
     margin: 0;
     font-size: 16px;
     font-weight: 600;
-    color: var(--text-primary);
+    color: #2c3e50;
   }
 }
 
 .toc-tree {
   padding: 8px;
+  background: #ffffff;
 }
 
 .tree-node {
@@ -115,24 +101,37 @@ onMounted(async () => {
   
   .node-title {
     font-size: 14px;
-    color: var(--text-regular);
+    color: #5a6c7d;
     cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
     
     &:hover {
-      color: var(--primary-color);
+      color: #409eff;
+      background: #f0f7ff;
     }
   }
 }
 
 :deep(.el-tree-node__content) {
-  padding: 6px 0;
+  padding: 4px 0;
   
   &:hover {
-    background-color: #f5f7fa;
+    background: #f8fafc;
   }
 }
 
 :deep(.el-tree-node__expand-icon) {
-  padding: 6px;
+  padding: 4px;
+  color: #a0aec0;
+  
+  &:hover {
+    color: #409eff;
+  }
+}
+
+:deep(.el-tree-node__children) {
+  margin-left: 12px;
 }
 </style>
