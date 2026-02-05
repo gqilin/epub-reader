@@ -150,3 +150,34 @@ export interface AnnotationOptions {
   onAnnotationRemoved?: (id: string) => void;
   onAnnotationUpdated?: (annotation: Annotation) => void;
 }
+
+// 阅读样式控制相关类型定义
+export interface ReadingStyles {
+  fontFamily?: string;           // 字体
+  fontSize?: string;             // 字号 (如 "16px", "1.2em")
+  color?: string;                // 字色 (如 "#333333", "rgb(51, 51, 51)")
+  lineHeight?: string;           // 行高 (如 "1.6", "160%")
+  paragraphSpacing?: string;     // 段间距 (如 "1em", "16px")
+  backgroundColor?: string;      // 背景色 (如 "#ffffff", "rgb(255, 255, 255)")
+  maxWidth?: string;             // 最大宽度 (如 "800px", "90%")
+  margin?: string;               // 页面边距 (如 "0 auto", "20px")
+  padding?: string;              // 内边距 (如 "20px", "2em")
+  textAlign?: 'left' | 'center' | 'right' | 'justify'; // 文本对齐
+  fontWeight?: 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900'; // 字体粗细
+  letterSpacing?: string;         // 字符间距 (如 "0.02em", "1px")
+  wordSpacing?: string;          // 词间距 (如 "0.1em", "2px")
+  textIndent?: string;           // 首行缩进 (如 "2em", "32px")
+}
+
+export interface StyleUpdateCallback {
+  (styles: ReadingStyles): void;
+}
+
+export interface StyleManager {
+  setStyle: (key: keyof ReadingStyles, value: string) => Promise<ReadingStyles>;
+  getStyles: () => ReadingStyles;
+  setStyles: (styles: Partial<ReadingStyles>) => Promise<ReadingStyles>;
+  resetStyles: () => Promise<ReadingStyles>;
+  onStyleUpdate: (callback: StyleUpdateCallback) => void;
+  offStyleUpdate: (callback: StyleUpdateCallback) => void;
+}

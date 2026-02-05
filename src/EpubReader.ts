@@ -17,6 +17,9 @@ import {
   UnderlineConfig,
   AnnotationManager,
   AnnotationOptions,
+  ReadingStyles,
+  StyleUpdateCallback,
+  StyleManager,
 } from './types';
 
 // XML解析器包装器 - 处理浏览器兼容性
@@ -1580,6 +1583,395 @@ class AnnotationManagerImpl implements AnnotationManager {
   }
 }
 
+// 阅读样式管理器
+class ReadingStyleManager implements StyleManager {
+  private readonly STORAGE_KEY = 'epub-reading-styles';
+  private readonly STORAGE_VERSION = '1.0';
+  private styles: ReadingStyles;
+  private eventListeners: Set<StyleUpdateCallback> = new Set();
+  private containerElementId: string = '';
+  
+  constructor(containerElementId: string = 'epub-chapter-container') {
+    this.containerElementId = containerElementId;
+    this.styles = this.loadStyles();
+    this.applyStyles();
+  }
+  
+  /**
+   * 设置单个样式属性
+   */
+  async setStyle(key: keyof ReadingStyles, value: string): Promise<ReadingStyles> {
+    if (!value || value.trim() === '') {
+      throw new Error(`样式值不能为空: ${key}`);
+    }
+    
+    // 验证样式值
+    this.validateStyleValue(key, value);
+    
+    // 更新样式
+    (this.styles as any)[key] = value;
+    
+    // 保存样式
+    this.saveStyles();
+    
+    // 应用样式
+    this.applyStyles();
+    
+    // 触发更新事件
+    this.emitUpdate();
+    
+    return { ...this.styles };
+  }
+  
+  /**
+   * 获取当前所有样式
+   */
+  getStyles(): ReadingStyles {
+    return { ...this.styles };
+  }
+  
+  /**
+   * 批量设置样式
+   */
+  async setStyles(styles: Partial<ReadingStyles>): Promise<ReadingStyles> {
+    // 验证所有样式值
+    for (const [key, value] of Object.entries(styles)) {
+      if (value && value.trim() !== '') {
+        this.validateStyleValue(key as keyof ReadingStyles, value);
+        (this.styles as any)[key] = value;
+      }
+    }
+    
+    // 保存样式
+    this.saveStyles();
+    
+    // 应用样式
+    this.applyStyles();
+    
+    // 触发更新事件
+    this.emitUpdate();
+    
+    return { ...this.styles };
+  }
+  
+  /**
+   * 重置所有样式为默认值
+   */
+  async resetStyles(): Promise<ReadingStyles> {
+    this.styles = this.getDefaultStyles();
+    
+    // 保存默认样式
+    this.saveStyles();
+    
+    // 应用样式
+    this.applyStyles();
+    
+    // 触发更新事件
+    this.emitUpdate();
+    
+    return { ...this.styles };
+  }
+  
+  /**
+   * 监听样式更新事件
+   */
+  onStyleUpdate(callback: StyleUpdateCallback): void {
+    this.eventListeners.add(callback);
+  }
+  
+  /**
+   * 移除样式更新事件监听
+   */
+  offStyleUpdate(callback: StyleUpdateCallback): void {
+    this.eventListeners.delete(callback);
+  }
+  
+  /**
+   * 验证样式值的有效性
+   */
+  private validateStyleValue(key: keyof ReadingStyles, value: string): void {
+    switch (key) {
+      case 'fontSize':
+        // 验证字号格式
+        if (!/^\d+(px|em|rem|%|pt|vw|vh)$/.test(value) && !/^\d+(\.\d+)?(px|em|rem|%|pt|vw|vh)$/.test(value)) {
+          throw new Error('字号格式无效，请使用如: 16px, 1.2em, 120%');
+        }
+        break;
+        
+      case 'lineHeight':
+        // 验证行高格式
+        if (!/^\d+(\.\d+)?$/.test(value) && !/^\d+%$/.test(value)) {
+          throw new Error('行高格式无效，请使用如: 1.6, 160%');
+        }
+        break;
+        
+      case 'paragraphSpacing':
+      case 'letterSpacing':
+      case 'wordSpacing':
+      case 'textIndent':
+        // 验证间距格式
+        if (!/^\d+(px|em|rem|pt|vw|vh)$/.test(value)) {
+          throw new Error(`间距格式无效，请使用如: 1em, 16px, 1rem`);
+        }
+        break;
+        
+      case 'maxWidth':
+        // 验证最大宽度格式
+        if (!/^\d+(px|em|rem|pt|%|vw|vh)$/.test(value) && value !== 'none') {
+          throw new Error('最大宽度格式无效，请使用如: 800px, 90%, none');
+        }
+        break;
+        
+      case 'margin':
+      case 'padding':
+        // 验证边距格式
+        if (!/^\d+(px|em|rem|%|pt|vw|vh)(\s+\d+(px|em|rem|%|pt|vw|vh))*$/.test(value) && value !== 'auto') {
+          throw new Error('边距格式无效，请使用如: 0 auto, 20px, 1em 2em');
+        }
+        break;
+        
+      case 'fontFamily':
+        // 字体名称验证
+        if (value.length === 0) {
+          throw new Error('字体名称不能为空');
+        }
+        break;
+        
+      case 'color':
+      case 'backgroundColor':
+        // 颜色格式验证
+        if (!/^#[0-9A-Fa-f]{6}$/.test(value) && 
+            !/^#[0-9A-Fa-f]{3}$/.test(value) && 
+            !/^rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/.test(value) &&
+            !/^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*[\d.]+\s*\)$/.test(value)) {
+          throw new Error('颜色格式无效，请使用如: #333333, rgb(51, 51, 51)');
+        }
+        break;
+        
+      case 'textAlign':
+        // 文本对齐验证
+        if (!['left', 'center', 'right', 'justify'].includes(value)) {
+          throw new Error('文本对齐方式无效，请使用: left, center, right, justify');
+        }
+        break;
+        
+      case 'fontWeight':
+        // 字体粗细验证
+        if (!['normal', 'bold', '100', '200', '300', '400', '500', '600', '700', '800', '900'].includes(value)) {
+          throw new Error('字体粗细无效，请使用: normal, bold, 100-900');
+        }
+        break;
+    }
+  }
+  
+  /**
+   * 获取默认样式
+   */
+  private getDefaultStyles(): ReadingStyles {
+    return {
+      fontFamily: '"Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Source Han Sans CN", "WenQuanYi Micro Hei", sans-serif',
+      fontSize: '16px',
+      color: '#333333',
+      lineHeight: '1.6',
+      paragraphSpacing: '1em',
+      backgroundColor: '#ffffff',
+      maxWidth: '800px',
+      margin: '0 auto',
+      padding: '20px',
+      textAlign: 'left' as const,
+      fontWeight: 'normal' as const,
+      letterSpacing: 'normal',
+      wordSpacing: 'normal',
+      textIndent: '2em'
+    };
+  }
+  
+  /**
+   * 加载保存的样式
+   */
+  private loadStyles(): ReadingStyles {
+    try {
+      const data = localStorage.getItem(this.STORAGE_KEY);
+      if (!data) {
+        return this.getDefaultStyles();
+      }
+      
+      const parsed = JSON.parse(data);
+      
+      // 检查版本兼容性
+      if (!parsed.version || !this.isVersionCompatible(parsed.version)) {
+        console.warn('样式数据版本不兼容，使用默认样式');
+        return this.getDefaultStyles();
+      }
+      
+      return { ...this.getDefaultStyles(), ...parsed.styles };
+    } catch (error) {
+      console.error('加载样式失败:', error);
+      return this.getDefaultStyles();
+    }
+  }
+  
+  /**
+   * 保存样式到本地存储
+   */
+  private saveStyles(): void {
+    try {
+      const data = {
+        version: this.STORAGE_VERSION,
+        timestamp: new Date().toISOString(),
+        styles: this.styles
+      };
+      
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data, null, 2));
+    } catch (error) {
+      console.error('保存样式失败:', error);
+    }
+  }
+  
+  /**
+   * 应用样式到DOM
+   */
+  private applyStyles(): void {
+    const container = document.getElementById(this.containerElementId);
+    if (!container) {
+      console.warn(`样式容器不存在: ${this.containerElementId}`);
+      return;
+    }
+    
+    // 移除旧的样式元素
+    const oldStyleElement = document.getElementById('epub-reading-styles');
+    if (oldStyleElement) {
+      oldStyleElement.remove();
+    }
+    
+    // 创建新的样式元素
+    const styleElement = document.createElement('style');
+    styleElement.id = 'epub-reading-styles';
+    styleElement.type = 'text/css';
+    
+    // 生成CSS规则
+    let cssRules = `
+/* EPUB阅读样式 */
+#${this.containerElementId} {
+  font-family: ${this.styles.fontFamily || 'inherit'};
+  font-size: ${this.styles.fontSize || '16px'};
+  color: ${this.styles.color || '#333333'};
+  line-height: ${this.styles.lineHeight || '1.6'};
+  background-color: ${this.styles.backgroundColor || '#ffffff'};
+  max-width: ${this.styles.maxWidth || 'none'};
+  margin: ${this.styles.margin || '0'};
+  padding: ${this.styles.padding || '20px'};
+  text-align: ${this.styles.textAlign || 'left'};
+  font-weight: ${this.styles.fontWeight || 'normal'};
+  letter-spacing: ${this.styles.letterSpacing || 'normal'};
+  word-spacing: ${this.styles.wordSpacing || 'normal'};
+}
+`;
+    
+    // 段落间距样式
+    if (this.styles.paragraphSpacing) {
+      cssRules += `
+#${this.containerElementId} p {
+  margin-bottom: ${this.styles.paragraphSpacing};
+  text-indent: ${this.styles.textIndent || '2em'};
+}
+`;
+    }
+    
+    // 其他元素的样式调整
+    cssRules += `
+#${this.containerElementId} h1,
+#${this.containerElementId} h2,
+#${this.containerElementId} h3,
+#${this.containerElementId} h4,
+#${this.containerElementId} h5,
+#${this.containerElementId} h6 {
+  margin-top: 1.5em;
+  margin-bottom: 1em;
+  text-indent: 0;
+  font-weight: bold;
+}
+
+#${this.containerElementId} h1 { font-size: 1.8em; }
+#${this.containerElementId} h2 { font-size: 1.6em; }
+#${this.containerElementId} h3 { font-size: 1.4em; }
+#${this.containerElementId} h4 { font-size: 1.2em; }
+#${this.containerElementId} h5 { font-size: 1.1em; }
+#${this.containerElementId} h6 { font-size: 1em; }
+
+#${this.containerElementId} ul,
+#${this.containerElementId} ol {
+  margin-bottom: 1em;
+  padding-left: 2em;
+}
+
+#${this.containerElementId} li {
+  margin-bottom: 0.5em;
+}
+
+#${this.containerElementId} blockquote {
+  margin: 1em 0;
+  padding: 0.5em 1em;
+  border-left: 3px solid #ddd;
+  background-color: #f9f9f9;
+  font-style: italic;
+}
+
+#${this.containerElementId} img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1em auto;
+}
+`;
+    
+    styleElement.textContent = cssRules;
+    
+    // 添加到文档头部
+    document.head.appendChild(styleElement);
+    
+    console.log('✅ 阅读样式已应用:', this.styles);
+  }
+  
+  /**
+   * 检查版本兼容性
+   */
+  private isVersionCompatible(version: string): boolean {
+    const currentParts = this.STORAGE_VERSION.split('.').map(Number);
+    const storedParts = version.split('.').map(Number);
+    
+    // 主版本必须相同
+    return currentParts[0] === storedParts[0];
+  }
+  
+  /**
+   * 触发样式更新事件
+   */
+  private emitUpdate(): void {
+    this.eventListeners.forEach(callback => {
+      try {
+        callback({ ...this.styles });
+      } catch (error) {
+        console.error('样式更新回调执行失败:', error);
+      }
+    });
+  }
+  
+  /**
+   * 清理样式
+   */
+  destroy(): void {
+    // 移除样式元素
+    const styleElement = document.getElementById('epub-reading-styles');
+    if (styleElement) {
+      styleElement.remove();
+    }
+    
+    // 清理事件监听器
+    this.eventListeners.clear();
+  }
+}
+
 export class EpubReader {
   private zip: JSZip | null = null;
   private info: EpubInfo | null = null;
@@ -1593,6 +1985,9 @@ export class EpubReader {
   private svgOverlay: SVGOverlayManager;
   private selectionManager: TextSelectionManager;
   private annotationOptions: AnnotationOptions | null = null;
+  
+  // 样式管理器
+  private styleManager: ReadingStyleManager | null = null;
 
   constructor(options: EpubReaderOptions = {}) {
     this.options = {
@@ -1611,6 +2006,9 @@ export class EpubReader {
     this.svgOverlay = new SVGOverlayManager();
     this.selectionManager = new TextSelectionManager();
     this.annotationOptions = null;
+    
+    // 初始化样式管理器
+    this.styleManager = new ReadingStyleManager(options.targetElementId || 'epub-chapter-container');
   }
 
   async load(epubData: ArrayBuffer | Uint8Array | Blob): Promise<void> {
@@ -3697,5 +4095,103 @@ export class EpubReader {
    */
   getSelectedRange(): Range | null {
     return this.selectionManager.getSelectedRange();
+  }
+
+  // ==================== 样式控制方法 ====================
+
+  /**
+   * 设置单个阅读样式
+   * @param key 样式属性名
+   * @param value 样式值
+   * @returns Promise<ReadingStyles> 返回更新后的所有样式
+   */
+  async setReadingStyle(key: keyof ReadingStyles, value: string): Promise<ReadingStyles> {
+    if (!this.styleManager) {
+      throw new Error('样式管理器未初始化');
+    }
+    
+    try {
+      return await this.styleManager.setStyle(key, value);
+    } catch (error) {
+      throw new Error(`设置样式失败 (${key}): ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 批量设置阅读样式
+   * @param styles 样式对象
+   * @returns Promise<ReadingStyles> 返回更新后的所有样式
+   */
+  async setReadingStyles(styles: Partial<ReadingStyles>): Promise<ReadingStyles> {
+    if (!this.styleManager) {
+      throw new Error('样式管理器未初始化');
+    }
+    
+    try {
+      return await this.styleManager.setStyles(styles);
+    } catch (error) {
+      throw new Error(`批量设置样式失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 获取当前阅读样式
+   * @returns ReadingStyles 当前所有样式设置
+   */
+  getReadingStyles(): ReadingStyles {
+    if (!this.styleManager) {
+      throw new Error('样式管理器未初始化');
+    }
+    
+    return this.styleManager.getStyles();
+  }
+
+  /**
+   * 重置阅读样式为默认值
+   * @returns Promise<ReadingStyles> 返回重置后的默认样式
+   */
+  async resetReadingStyles(): Promise<ReadingStyles> {
+    if (!this.styleManager) {
+      throw new Error('样式管理器未初始化');
+    }
+    
+    try {
+      return await this.styleManager.resetStyles();
+    } catch (error) {
+      throw new Error(`重置样式失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 监听样式更新事件
+   * @param callback 样式更新回调函数
+   */
+  onStyleUpdate(callback: StyleUpdateCallback): void {
+    if (!this.styleManager) {
+      console.warn('样式管理器未初始化，无法监听样式更新');
+      return;
+    }
+    
+    this.styleManager.onStyleUpdate(callback);
+  }
+
+  /**
+   * 移除样式更新事件监听
+   * @param callback 要移除的回调函数
+   */
+  offStyleUpdate(callback: StyleUpdateCallback): void {
+    if (!this.styleManager) {
+      return;
+    }
+    
+    this.styleManager.offStyleUpdate(callback);
+  }
+
+  /**
+   * 获取样式管理器实例（高级用法）
+   * @returns ReadingStyleManager 样式管理器实例
+   */
+  getStyleManager(): ReadingStyleManager | null {
+    return this.styleManager;
   }
 }

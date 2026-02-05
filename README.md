@@ -1,9 +1,10 @@
 # EPUB Reader Core
 
-A framework-agnostic TypeScript library for parsing and reading EPUB files in web browsers. This library provides a simple API to extract EPUB metadata, table of contents, and chapter content with automatic DOM rendering.
+A powerful TypeScript library for parsing and reading EPUB files in web browsers with advanced annotation capabilities. This library provides a simple API to extract EPUB metadata, table of contents, and chapter content with automatic DOM rendering and comprehensive marking features.
 
-## Features
+## ✨ Features
 
+### Core EPUB Features
 - 📚 Parse EPUB files from various input formats (ArrayBuffer, Uint8Array, Blob, File)
 - 🎯 Framework-agnostic - works with any JavaScript framework
 - 📖 Extract book metadata (title, author, description, etc.)
@@ -17,42 +18,72 @@ A framework-agnostic TypeScript library for parsing and reading EPUB files in we
 - 📦 Lightweight and performant
 - 🔧 Tree-shakable and browser-compatible
 
+### 🎯 Annotation Features
+- 📝 **4 Mark Types**: Highlight, Underline, Note, Bookmark
+- 🎨 **6 Underline Styles**: Solid, Dashed, Dotted, Wavy, Double, Thick
+- 💾 **Data Persistence**: LocalStorage storage with import/export
+- 🔄 **Chapter Switching**: Seamless annotation rendering across chapters
+- 🐛 **Debug Tools**: Comprehensive debugging panel and state monitoring
+- 📱 **Responsive Design**: Perfect adaptation for mobile and desktop
+- ⚡ **High Performance**: Optimized rendering with caching mechanisms
+
 ## Installation
 
 ```bash
 npm install epub-reader-core
 ```
 
-## Quick Start
+## 🚀 Quick Start
+
+### Installation
+
+```bash
+npm install epub-reader-src
+```
+
+### Basic Usage
 
 ```typescript
-import { EpubReader } from 'epub-reader-core';
+import { EpubReader } from 'epub-reader-src';
 
-// Create a new reader instance with target DOM element
-const reader = new EpubReader({
-  targetElementId: 'chapter-content' // DOM element ID where chapters will be rendered
+const reader = new EpubReader();
+await reader.load(epubData);
+await reader.renderChapter(0, 'container');
+```
+
+### With Annotations
+
+```typescript
+import { EpubReader } from 'epub-reader-src';
+
+const reader = new EpubReader();
+await reader.load(epubData);
+
+// Setup annotation features
+reader.setupAnnotations({
+  containerId: 'epub-container',
+  toolbarId: 'annotation-toolbar',
+  onAnnotationCreated: (annotation) => console.log('Created:', annotation)
 });
 
-// Load an EPUB file and automatically render first chapter
-await reader.load(epubFile); // epubFile can be File, ArrayBuffer, or Uint8Array
+await reader.renderChapter(0, 'container');
 
-// Get book information
-const metadata = reader.getMetadata();
-console.log('Title:', metadata.title);
-console.log('Author:', metadata.creator);
-
-// Get chapters
-const chapters = reader.getChapters();
-console.log('Total chapters:', chapters.length);
-
-// Navigate between chapters
-await reader.nextChapter(); // Load next chapter
-await reader.previousChapter(); // Load previous chapter
-
-// Load specific chapter
-await reader.loadChapterByIndex(2); // Load chapter 3 (0-indexed)
-await reader.loadChapterByHref('chapter-3.xhtml'); // Load by href
+// Create annotation from selection
+await reader.createAnnotationFromSelection('highlight');
 ```
+
+## 📚 Documentation
+
+### 🎯 Annotation Features
+- **[Annotation Features Guide](./docs/ANNOTATION_FEATURES.md)** - Complete annotation system documentation
+- **[API Reference](./docs/api/epub-reader.md)** - Full API documentation
+- **[Type Definitions](./docs/api/types.md)** - TypeScript type definitions
+
+### 📖 User Guides
+- **[Installation](./docs/guide/installation.md)** - Installation and setup
+- **[Getting Started](./docs/guide/getting-started.md)** - Quick start guide
+- **[Basic Usage](./docs/guide/basic-usage.md)** - Core functionality usage
+- **[Vue3 Example](./examples/vue3/)** - Complete Vue3 implementation example
 
 ```html
 <!-- HTML setup -->

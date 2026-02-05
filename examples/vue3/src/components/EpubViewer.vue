@@ -27,6 +27,245 @@
           🐛 调试
         </button>
       </div>
+      
+      <!-- 样式控制按钮 -->
+      <div class="style-controls">
+        <button @click="toggleStylePanel" class="style-toggle" :class="{ active: stylePanelVisible }">
+          🎨 样式
+        </button>
+      </div>
+    </div>
+    
+    <!-- 样式控制面板 -->
+    <div v-if="stylePanelVisible" class="style-panel">
+      <div class="style-panel-header">
+        <h3>🎨 阅读样式设置</h3>
+        <button @click="toggleStylePanel" class="close-btn">×</button>
+      </div>
+      <div class="style-panel-body">
+        <div class="style-section">
+          <h4>字体设置</h4>
+          <div class="style-item">
+            <label>字体：</label>
+            <select v-model="currentStyles.fontFamily" @change="updateStyle('fontFamily', currentStyles.fontFamily)">
+              <option value="'Microsoft YaHei', 'PingFang SC', sans-serif">微软雅黑</option>
+              <option value="'SimSun', serif">宋体</option>
+              <option value="'SimHei', sans-serif">黑体</option>
+              <option value="'KaiTi', serif">楷体</option>
+              <option value="'FangSong', serif">仿宋</option>
+              <option value="system-ui, sans-serif">系统字体</option>
+              <option value="'Arial', sans-serif">Arial</option>
+              <option value="'Times New Roman', serif">Times New Roman</option>
+            </select>
+          </div>
+          <div class="style-item">
+            <label>字号：</label>
+            <div class="input-group">
+              <input 
+                type="range" 
+                min="12" 
+                max="32" 
+                v-model="fontSizeValue" 
+                @input="updateFontSize"
+                class="range-input"
+              />
+              <input 
+                type="text" 
+                v-model="currentStyles.fontSize" 
+                @change="updateStyle('fontSize', currentStyles.fontSize)"
+                @blur="validateFontSize"
+                class="text-input"
+                placeholder="16px"
+              />
+            </div>
+          </div>
+          <div class="style-item">
+            <label>字体粗细：</label>
+            <select v-model="currentStyles.fontWeight" @change="updateStyle('fontWeight', currentStyles.fontWeight)">
+              <option value="normal">正常</option>
+              <option value="bold">粗体</option>
+              <option value="300">细体</option>
+              <option value="400">正常(400)</option>
+              <option value="500">中等</option>
+              <option value="600">半粗</option>
+              <option value="700">粗体(700)</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="style-section">
+          <h4>颜色设置</h4>
+          <div class="style-item">
+            <label>文字颜色：</label>
+            <div class="color-input-group">
+              <input 
+                type="color" 
+                v-model="textColorValue" 
+                @input="updateTextColor"
+                class="color-input"
+              />
+              <input 
+                type="text" 
+                v-model="currentStyles.color" 
+                @change="updateStyle('color', currentStyles.color)"
+                @blur="validateColor"
+                class="text-input"
+                placeholder="#333333"
+              />
+            </div>
+          </div>
+          <div class="style-item">
+            <label>背景颜色：</label>
+            <div class="color-input-group">
+              <input 
+                type="color" 
+                v-model="backgroundColorValue" 
+                @input="updateBackgroundColor"
+                class="color-input"
+              />
+              <input 
+                type="text" 
+                v-model="currentStyles.backgroundColor" 
+                @change="updateStyle('backgroundColor', currentStyles.backgroundColor)"
+                @blur="validateColor"
+                class="text-input"
+                placeholder="#ffffff"
+              />
+            </div>
+          </div>
+        </div>
+        
+        <div class="style-section">
+          <h4>段落设置</h4>
+          <div class="style-item">
+            <label>行高：</label>
+            <div class="input-group">
+              <input 
+                type="range" 
+                min="1.0" 
+                max="3.0" 
+                step="0.1"
+                v-model="lineHeightValue" 
+                @input="updateLineHeight"
+                class="range-input"
+              />
+              <input 
+                type="text" 
+                v-model="currentStyles.lineHeight" 
+                @change="updateStyle('lineHeight', currentStyles.lineHeight)"
+                @blur="validateLineHeight"
+                class="text-input"
+                placeholder="1.6"
+              />
+            </div>
+          </div>
+          <div class="style-item">
+            <label>段间距：</label>
+            <div class="input-group">
+              <input 
+                type="range" 
+                min="0" 
+                max="3" 
+                step="0.1"
+                v-model="paragraphSpacingValue" 
+                @input="updateParagraphSpacing"
+                class="range-input"
+              />
+              <input 
+                type="text" 
+                v-model="currentStyles.paragraphSpacing" 
+                @change="updateStyle('paragraphSpacing', currentStyles.paragraphSpacing)"
+                @blur="validateSpacing"
+                class="text-input"
+                placeholder="1em"
+              />
+            </div>
+          </div>
+          <div class="style-item">
+            <label>首行缩进：</label>
+            <div class="input-group">
+              <input 
+                type="range" 
+                min="0" 
+                max="4" 
+                step="0.5"
+                v-model="textIndentValue" 
+                @input="updateTextIndent"
+                class="range-input"
+              />
+              <input 
+                type="text" 
+                v-model="currentStyles.textIndent" 
+                @change="updateStyle('textIndent', currentStyles.textIndent)"
+                @blur="validateSpacing"
+                class="text-input"
+                placeholder="2em"
+              />
+            </div>
+          </div>
+        </div>
+        
+        <div class="style-section">
+          <h4>对齐设置</h4>
+          <div class="style-item">
+            <label>文本对齐：</label>
+            <div class="button-group">
+              <button 
+                v-for="align in textAlignOptions" 
+                :key="align.value"
+                @click="updateStyle('textAlign', align.value)"
+                :class="['align-btn', { active: currentStyles.textAlign === align.value }]"
+                :title="align.label"
+              >
+                {{ align.icon }}
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <div class="style-section">
+          <h4>高级设置</h4>
+          <div class="style-item">
+            <label>最大宽度：</label>
+            <select v-model="currentStyles.maxWidth" @change="updateStyle('maxWidth', currentStyles.maxWidth)">
+              <option value="none">无限制</option>
+              <option value="600px">600px</option>
+              <option value="700px">700px</option>
+              <option value="800px">800px</option>
+              <option value="900px">900px</option>
+              <option value="90%">90%</option>
+              <option value="95%">95%</option>
+            </select>
+          </div>
+          <div class="style-item">
+            <label>字符间距：</label>
+            <input 
+              type="text" 
+              v-model="currentStyles.letterSpacing" 
+              @change="updateStyle('letterSpacing', currentStyles.letterSpacing)"
+              @blur="validateSpacing"
+              class="text-input"
+              placeholder="normal"
+            />
+          </div>
+          <div class="style-item">
+            <label>词间距：</label>
+            <input 
+              type="text" 
+              v-model="currentStyles.wordSpacing" 
+              @change="updateStyle('wordSpacing', currentStyles.wordSpacing)"
+              @blur="validateSpacing"
+              class="text-input"
+              placeholder="normal"
+            />
+          </div>
+        </div>
+      </div>
+      <div class="style-panel-footer">
+        <button @click="resetStyles" class="reset-btn">🔄 重置默认</button>
+        <button @click="exportStyles" class="export-btn">💾 导出配置</button>
+        <button @click="importStyles" class="import-btn">📂 导入配置</button>
+      </div>
     </div>
     
     <div class="content-container">
@@ -200,7 +439,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
-import { EpubReader, EpubChapter, Annotation, AnnotationType } from 'epub-reader-src';
+import { EpubReader, EpubChapter, Annotation, AnnotationType, ReadingStyles } from 'epub-reader-src';
 
 interface Props {
   reader: EpubReader;
@@ -222,6 +461,24 @@ const debugStats = ref({ count: 0, size: 0, lastModified: null as string | null 
 
 // 下划线样式菜单状态
 const showUnderlineMenu = ref(false);
+
+// 样式控制相关状态
+const stylePanelVisible = ref(false);
+const currentStyles = ref<ReadingStyles>({});
+const fontSizeValue = ref(16);
+const textColorValue = ref('#333333');
+const backgroundColorValue = ref('#ffffff');
+const lineHeightValue = ref(1.6);
+const paragraphSpacingValue = ref(1);
+const textIndentValue = ref(2);
+
+// 文本对齐选项
+const textAlignOptions = [
+  { value: 'left', icon: '⬅️', label: '左对齐' },
+  { value: 'center', icon: '⬆️', label: '居中对齐' },
+  { value: 'right', icon: '➡️', label: '右对齐' },
+  { value: 'justify', icon: '↔️', label: '两端对齐' }
+];
 
 // 防重复渲染状态
 let isRenderingAnnotations = false;
@@ -975,11 +1232,284 @@ const handleAnnotationUpdated = (annotation: Annotation) => {
   loadAnnotations();
 };
 
+// ==================== 样式控制方法 ====================
+
+/**
+ * 初始化样式控制
+ */
+const initializeStyles = () => {
+  try {
+    // 获取当前样式
+    currentStyles.value = props.reader.getReadingStyles();
+    
+    // 更新控件的显示值
+    updateControlValues();
+    
+    // 监听样式更新事件
+    props.reader.onStyleUpdate(handleStyleUpdate);
+    
+    console.log('✅ 样式控制初始化完成:', currentStyles.value);
+  } catch (error) {
+    console.error('初始化样式控制失败:', error);
+  }
+};
+
+/**
+ * 更新控件显示值
+ */
+const updateControlValues = () => {
+  const styles = currentStyles.value;
+  
+  // 字号
+  const fontSize = parseFloat(styles.fontSize?.replace('px', '') || '16');
+  fontSizeValue.value = fontSize;
+  
+  // 颜色
+  textColorValue.value = styles.color || '#333333';
+  backgroundColorValue.value = styles.backgroundColor || '#ffffff';
+  
+  // 行高
+  lineHeightValue.value = parseFloat(styles.lineHeight || '1.6');
+  
+  // 段间距
+  const paragraphSpacing = parseFloat(styles.paragraphSpacing?.replace('em', '') || '1');
+  paragraphSpacingValue.value = paragraphSpacing;
+  
+  // 首行缩进
+  const textIndent = parseFloat(styles.textIndent?.replace('em', '') || '2');
+  textIndentValue.value = textIndent;
+};
+
+/**
+ * 切换样式面板显示
+ */
+const toggleStylePanel = () => {
+  stylePanelVisible.value = !stylePanelVisible.value;
+  
+  if (stylePanelVisible.value) {
+    // 打开面板时更新当前样式
+    currentStyles.value = props.reader.getReadingStyles();
+    updateControlValues();
+  }
+};
+
+/**
+ * 更新单个样式
+ */
+const updateStyle = async (key: keyof ReadingStyles, value: string) => {
+  try {
+    console.log(`🎨 更新样式: ${key} = ${value}`);
+    
+    const updatedStyles = await props.reader.setReadingStyle(key, value);
+    currentStyles.value = updatedStyles;
+    
+    // 更新控件的显示值
+    updateControlValues();
+    
+  } catch (error) {
+    console.error('更新样式失败:', error);
+    alert(`样式设置失败: ${error instanceof Error ? error.message : String(error)}`);
+    
+    // 恢复控件的显示值
+    currentStyles.value = props.reader.getReadingStyles();
+    updateControlValues();
+  }
+};
+
+/**
+ * 更新字号（滑块）
+ */
+const updateFontSize = () => {
+  currentStyles.value.fontSize = `${fontSizeValue.value}px`;
+  updateStyle('fontSize', `${fontSizeValue.value}px`);
+};
+
+/**
+ * 验证字号输入
+ */
+const validateFontSize = () => {
+  const value = currentStyles.value.fontSize;
+  if (!/^\d+(px|em|rem|%|pt)$/.test(value)) {
+    currentStyles.value.fontSize = '16px';
+    fontSizeValue.value = 16;
+    updateStyle('fontSize', '16px');
+  }
+};
+
+/**
+ * 更新文字颜色
+ */
+const updateTextColor = () => {
+  currentStyles.value.color = textColorValue.value;
+  updateStyle('color', textColorValue.value);
+};
+
+/**
+ * 更新背景颜色
+ */
+const updateBackgroundColor = () => {
+  currentStyles.value.backgroundColor = backgroundColorValue.value;
+  updateStyle('backgroundColor', backgroundColorValue.value);
+};
+
+/**
+ * 验证颜色输入
+ */
+const validateColor = () => {
+  const color = currentStyles.value.color;
+  if (!/^#[0-9A-Fa-f]{6}$/.test(color) && !/^#[0-9A-Fa-f]{3}$/.test(color)) {
+    currentStyles.value.color = '#333333';
+    textColorValue.value = '#333333';
+    updateStyle('color', '#333333');
+  }
+};
+
+/**
+ * 更新行高
+ */
+const updateLineHeight = () => {
+  currentStyles.value.lineHeight = lineHeightValue.value.toString();
+  updateStyle('lineHeight', lineHeightValue.value.toString());
+};
+
+/**
+ * 验证行高输入
+ */
+const validateLineHeight = () => {
+  const value = currentStyles.value.lineHeight;
+  if (!/^\d+(\.\d+)?$/.test(value) && !/^\d+%$/.test(value)) {
+    currentStyles.value.lineHeight = '1.6';
+    lineHeightValue.value = 1.6;
+    updateStyle('lineHeight', '1.6');
+  }
+};
+
+/**
+ * 更新段间距
+ */
+const updateParagraphSpacing = () => {
+  currentStyles.value.paragraphSpacing = `${paragraphSpacingValue.value}em`;
+  updateStyle('paragraphSpacing', `${paragraphSpacingValue.value}em`);
+};
+
+/**
+ * 更新首行缩进
+ */
+const updateTextIndent = () => {
+  currentStyles.value.textIndent = `${textIndentValue.value}em`;
+  updateStyle('textIndent', `${textIndentValue.value}em`);
+};
+
+/**
+ * 验证间距输入
+ */
+const validateSpacing = () => {
+  const spacing = currentStyles.value.paragraphSpacing;
+  if (!/^\d+(px|em|rem|pt)$/.test(spacing)) {
+    currentStyles.value.paragraphSpacing = '1em';
+    paragraphSpacingValue.value = 1;
+    updateStyle('paragraphSpacing', '1em');
+  }
+};
+
+/**
+ * 重置样式
+ */
+const resetStyles = async () => {
+  if (confirm('确定要重置所有样式为默认值吗？')) {
+    try {
+      const defaultStyles = await props.reader.resetReadingStyles();
+      currentStyles.value = defaultStyles;
+      updateControlValues();
+      
+      console.log('✅ 样式已重置为默认值');
+      alert('样式已重置为默认值！');
+    } catch (error) {
+      console.error('重置样式失败:', error);
+      alert(`重置样式失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+};
+
+/**
+ * 导出样式配置
+ */
+const exportStyles = () => {
+  try {
+    const config = {
+      version: '1.0',
+      timestamp: new Date().toISOString(),
+      styles: currentStyles.value
+    };
+    
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `epub-styles-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    
+    URL.revokeObjectURL(url);
+    console.log('✅ 样式配置已导出');
+  } catch (error) {
+    console.error('导出样式配置失败:', error);
+    alert('导出样式配置失败');
+  }
+};
+
+/**
+ * 导入样式配置
+ */
+const importStyles = () => {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  
+  input.onchange = async (event) => {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    
+    try {
+      const text = await file.text();
+      const config = JSON.parse(text);
+      
+      if (!config.styles) {
+        throw new Error('配置文件格式无效');
+      }
+      
+      await props.reader.setReadingStyles(config.styles);
+      currentStyles.value = props.reader.getReadingStyles();
+      updateControlValues();
+      
+      console.log('✅ 样式配置已导入');
+      alert('样式配置导入成功！');
+    } catch (error) {
+      console.error('导入样式配置失败:', error);
+      alert(`导入配置失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+  
+  input.click();
+};
+
+/**
+ * 处理样式更新事件
+ */
+const handleStyleUpdate = (styles: ReadingStyles) => {
+  currentStyles.value = styles;
+  updateControlValues();
+  console.log('🎨 样式已更新:', styles);
+};
+
 // 组件挂载时初始化
 onMounted(() => {
   // 可以在这里自动启用标记功能
   // annotationsEnabled.value = true;
   // initializeAnnotations();
+  
+  // 初始化样式控制
+  initializeStyles();
   
   // 添加点击外部关闭下划线菜单
   document.addEventListener('click', handleOutsideClick);
@@ -1006,7 +1536,17 @@ onUnmounted(() => {
     existingSvg.remove();
   }
   
-  console.log('🧹 组件卸载，清理标记相关资源');
+  // 清理样式管理器
+  try {
+    const styleManager = props.reader.getStyleManager();
+    if (styleManager) {
+      styleManager.destroy();
+    }
+  } catch (error) {
+    console.warn('清理样式管理器失败:', error);
+  }
+  
+  console.log('🧹 组件卸载，清理标记和样式相关资源');
 });
 
 /**
@@ -1024,7 +1564,7 @@ const handleOutsideClick = (event: MouseEvent) => {
   }
 };
 
-// 暴露CFI方法给父组件
+// 暴露方法给父组件
 defineExpose({
   setCurrentChapter: (index: number) => {
     if (index >= 0 && index < chapters.value.length) {
@@ -1039,7 +1579,13 @@ defineExpose({
   createUnderline,
   createNote,
   createBookmark,
-  annotations: currentAnnotations
+  toggleStylePanel,
+  updateStyle,
+  resetStyles,
+  exportStyles,
+  importStyles,
+  annotations: currentAnnotations,
+  currentStyles: currentStyles
 });
 
 
@@ -1585,6 +2131,266 @@ defineExpose({
   background: #5a32a3;
 }
 
+/* 样式控制相关样式 */
+.style-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.style-toggle {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.style-toggle:hover {
+  background: #5a6268;
+}
+
+.style-toggle.active {
+  background: #17a2b8;
+}
+
+.style-toggle.active:hover {
+  background: #138496;
+}
+
+/* 样式控制面板 */
+.style-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  z-index: 10002;
+  animation: stylePanelSlideIn 0.3s ease;
+}
+
+@keyframes stylePanelSlideIn {
+  from { 
+    opacity: 0; 
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  to { 
+    opacity: 1; 
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.style-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #eee;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 12px 12px 0 0;
+}
+
+.style-panel-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.style-panel-body {
+  flex: 1;
+  padding: 1.5rem;
+  overflow-y: auto;
+  max-height: calc(90vh - 200px);
+}
+
+.style-section {
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+}
+
+.style-section h4 {
+  margin: 0 0 1rem 0;
+  color: #333;
+  font-size: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.style-section h4::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: #667eea;
+  border-radius: 50%;
+}
+
+.style-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+  gap: 1rem;
+}
+
+.style-item:last-child {
+  margin-bottom: 0;
+}
+
+.style-item label {
+  min-width: 100px;
+  font-weight: 500;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.style-item select,
+.style-item input.text-input {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.style-item select:focus,
+.style-item input.text-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.range-input {
+  flex: 1;
+  min-width: 100px;
+}
+
+.text-input {
+  width: 80px;
+  min-width: 80px;
+}
+
+.color-input-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.color-input {
+  width: 50px;
+  height: 36px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 2px;
+  transition: border-color 0.2s;
+}
+
+.color-input:hover {
+  border-color: #667eea;
+}
+
+.button-group {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.align-btn {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 1rem;
+  border-radius: 4px;
+}
+
+.align-btn:hover {
+  background: #f0f0f0;
+  border-color: #667eea;
+}
+
+.align-btn.active {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+}
+
+.style-panel-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #eee;
+  background: #f8f9fa;
+  border-radius: 0 0 12px 12px;
+  gap: 0.5rem;
+}
+
+.style-panel-footer button {
+  padding: 0.5rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.reset-btn {
+  background: #6c757d;
+  color: white;
+  border-color: #6c757d;
+}
+
+.reset-btn:hover {
+  background: #5a6268;
+}
+
+.export-btn {
+  background: #28a745;
+  color: white;
+  border-color: #28a745;
+}
+
+.export-btn:hover {
+  background: #218838;
+}
+
+.import-btn {
+  background: #17a2b8;
+  color: white;
+  border-color: #17a2b8;
+}
+
+.import-btn:hover {
+  background: #138496;
+}
+
 /* 移动端适配 */
 @media (max-width: 768px) {
   .viewer-header {
@@ -1640,6 +2446,82 @@ defineExpose({
   .underline-option svg {
     width: 30px;
     height: 8px;
+  }
+  
+  /* 样式面板移动端适配 */
+  .style-panel {
+    width: 95%;
+    max-height: 95vh;
+  }
+  
+  .style-panel-header {
+    padding: 1rem;
+  }
+  
+  .style-panel-body {
+    padding: 1rem;
+    max-height: calc(95vh - 180px);
+  }
+  
+  .style-section {
+    padding: 0.8rem;
+    margin-bottom: 1rem;
+  }
+  
+  .style-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .style-item label {
+    min-width: auto;
+    font-size: 0.85rem;
+  }
+  
+  .style-item select,
+  .style-item input.text-input {
+    width: 100%;
+  }
+  
+  .input-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  
+  .range-input {
+    width: 100%;
+  }
+  
+  .text-input {
+    width: 100%;
+    min-width: auto;
+  }
+  
+  .color-input-group {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+  
+  .button-group {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+  
+  .align-btn {
+    font-size: 0.9rem;
+    padding: 0.4rem;
+  }
+  
+  .style-panel-footer {
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1rem;
+  }
+  
+  .style-panel-footer button {
+    width: 100%;
   }
 }
 </style>
